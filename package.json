@@ -1,0 +1,17 @@
+{
+  "name": "edu-walker-game",
+  "version": "1.0.0",
+  "description": "2D Бродилка: Звериная битва знаний",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "game",
+    "canvas",
+    "quiz"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

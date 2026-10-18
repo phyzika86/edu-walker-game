@@ -1,0 +1,3319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>2D Бродилка: Звериная битва знаний</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Courier New', monospace; user-select: none; }
+
+  html, body { height: 100%; }
+  body {
+    background: #0d0d0d;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Приложение занимает всё окно браузера */
+  .screen {
+    position: relative; width: 100%; max-width: none;
+    height: 100vh; image-rendering: pixelated;
+    display: flex; flex-direction: column;
+  }
+  @supports (height: 100dvh) {
+    .screen { height: 100dvh; }
+  }
+
+  .cabinet {
+    background: #1a1a1a;
+    border: 8px solid #333;
+    border-radius: 0;
+    padding: 12px;
+    box-shadow: 0 0 0 4px #0a0a0a, 0 0 40px rgba(0,255,0,0.15), inset 0 0 40px rgba(0,0,0,0.8);
+    flex: 1 1 auto; min-height: 0; width: 100%;
+    display: flex; flex-direction: column;
+  }
+
+  .hud { flex: 0 0 auto; }
+  .quiz-panel { flex: 0 0 auto; }
+
+  #gameCanvas {
+    display: block; width: 100%; height: 100%;
+    flex: 1 1 0; min-height: 0; object-fit: contain;
+    background: #0d0d0d; border: 4px solid #111; border-radius: 8px;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+
+  .hud {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; padding: 8px 12px; margin-bottom: 8px;
+    background: #0a0a0a; border: 3px solid #2a5a2a; border-radius: 8px;
+    color: #33ff33; font-size: 0.85rem; font-weight: bold;
+    letter-spacing: 1px; text-shadow: 0 0 5px #33ff33; flex-wrap: wrap;
+  }
+
+  .hud-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+  .hp-mini { width: 90px; height: 12px; background: #330000; border: 2px solid #660000; border-radius: 3px; overflow: hidden; }
+  .hp-mini-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff0000, #ff6666); transition: width 0.3s; }
+  .hp-mini-fill.player { background: linear-gradient(90deg, #33aa33, #66ff66); }
+  .hp-mini-fill.boss { background: linear-gradient(90deg, #aa3333, #ff6666); }
+
+  .quiz-panel {
+    margin-top: 10px; background: #0a0a0a; border: 3px solid #2a5a2a;
+    border-radius: 12px; padding: 12px 16px; color: #33ff33;
+    display: none; box-shadow: 0 0 20px rgba(0,255,0,0.15), inset 0 0 20px rgba(0,0,0,0.6);
+  }
+  .quiz-panel.active { display: block; }
+
+  .quiz-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 0.8rem; }
+  .quiz-turn { font-size: 1rem; font-weight: bold; color: #ffdd33; text-shadow: 0 0 8px #ffaa00; letter-spacing: 2px; }
+  .quiz-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+  .quiz-stat { background: #1a2a1a; padding: 3px 10px; border-radius: 4px; border: 1px solid #2a5a2a; color: #88ff88; font-size: 0.75rem; }
+
+  .question-text {
+    background: #111; border: 2px dashed #33aa33; border-radius: 8px;
+    padding: 10px 14px; color: #ccffcc; font-size: 0.95rem;
+    text-align: center; margin-bottom: 10px; line-height: 1.4; font-weight: bold;
+  }
+
+  .answers-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
+
+  .answer-btn {
+    background: #1a2a1a; border: 2px solid #33aa33; color: #33ff33;
+    padding: 8px 16px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 0.85rem; font-weight: bold;
+    transition: all 0.1s; flex: 1 1 auto; min-width: 100px; max-width: 240px; text-align: center;
+  }
+  .answer-btn:hover:not(:disabled) { background: #2a4a2a; box-shadow: 0 0 12px #33ff33; transform: scale(1.02); }
+  .answer-btn:active:not(:disabled) { transform: scale(0.98); }
+  .answer-btn.correct { background: #1a5a1a; border-color: #66ff66; color: #aaffaa; animation: flashCorrect 0.4s; }
+  .answer-btn.wrong { background: #5a1a1a; border-color: #ff6666; color: #ffaaaa; animation: shakeWrong 0.4s; }
+  .answer-btn:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.6); }
+
+  @keyframes flashCorrect {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.08); box-shadow: 0 0 25px #66ff66; }
+  }
+  @keyframes shakeWrong {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  .fact-box {
+    background: #2a2a0a; border: 2px solid #aaaa33; border-radius: 6px;
+    padding: 8px 12px; color: #ffff88; font-size: 0.8rem;
+    text-align: center; margin-bottom: 8px; display: none; animation: fadeIn 0.4s;
+  }
+  .fact-box.show { display: block; }
+
+  .feedback { text-align: center; font-size: 0.8rem; min-height: 1.2rem; color: #aaffaa; }
+
+  /* Кнопки */
+  .btn-primary, .btn-secondary {
+    display: inline-block;
+    background: #1a4a1a;
+    border: 3px solid #33ff33;
+    color: #33ff33;
+    padding: 10px 24px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.1s;
+    box-shadow: 0 0 15px rgba(51,255,51,0.3);
+    margin: 4px;
+  }
+  .btn-primary:hover { background: #33ff33; color: #000; box-shadow: 0 0 25px #33ff33; }
+  .btn-secondary { background: #4a1a1a; border-color: #ff6666; color: #ff8888; }
+  .btn-secondary:hover { background: #ff6666; color: #000; }
+  .btn-primary:active, .btn-secondary:active { transform: scale(0.97); }
+
+  .btn-continue {
+    display: block;
+    margin: 10px auto 0;
+    background: #1a4a1a;
+    border: 3px solid #ffdd33;
+    color: #ffdd33;
+    padding: 10px 28px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    box-shadow: 0 0 20px rgba(255,221,51,0.4);
+    animation: continuePulse 1s infinite alternate;
+  }
+  .btn-continue:hover { background: #ffdd33; color: #000; box-shadow: 0 0 30px #ffdd33; }
+  @keyframes continuePulse {
+    from { box-shadow: 0 0 10px rgba(255,221,51,0.4); }
+    to { box-shadow: 0 0 25px rgba(255,221,51,0.8); }
+  }
+
+  .overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    border-radius: 8px; display: flex; flex-direction: column;
+    justify-content: flex-start; align-items: center; gap: 16px;
+    z-index: 100; text-align: center; padding: 20px;
+    color: #33ff33; overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+  /* Центрируем окно, но не обрезаем верх, когда содержимое выше экрана */
+  .overlay > :first-child { margin-top: auto; }
+  .overlay > :last-child { margin-bottom: auto; }
+
+  @media (max-width: 700px) {
+    .overlay { padding: 12px; gap: 10px; }
+  }
+
+  .overlay h1 {
+    font-size: 1.6rem; margin: 0;
+    text-shadow: 0 0 15px #33ff33, 0 0 30px #00aa00;
+    letter-spacing: 3px; animation: glowPulse 1.5s infinite alternate;
+  }
+  @keyframes glowPulse {
+    from { text-shadow: 0 0 10px #33ff33; }
+    to { text-shadow: 0 0 25px #33ff33, 0 0 40px #00aa00; }
+  }
+
+  .overlay p { font-size: 0.9rem; color: #aaffaa; max-width: 700px; line-height: 1.5; margin: 0; }
+
+  .section-title {
+    color: #ffdd33;
+    font-size: 0.95rem;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-top: 6px;
+  }
+
+  .grid-options {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    max-width: 800px;
+  }
+
+  .option-btn {
+    background: #1a2a1a; border: 3px solid #33aa33; color: #33ff33;
+    padding: 12px 18px; border-radius: 10px; cursor: pointer;
+    font-family: inherit; font-size: 0.8rem; font-weight: bold;
+    transition: all 0.15s; display: flex; flex-direction: column;
+    align-items: center; gap: 4px; min-width: 130px;
+  }
+  .option-btn:hover { background: #2a4a2a; box-shadow: 0 0 20px rgba(51,255,51,0.5); transform: translateY(-2px); }
+  .option-btn.selected { background: #2a5a2a; border-color: #ffdd33; color: #ffdd33; box-shadow: 0 0 20px rgba(255,221,51,0.5); }
+  .option-btn .opt-icon { font-size: 1.8rem; }
+  .option-btn .opt-label { font-size: 0.8rem; }
+  .option-btn .opt-desc { font-size: 0.65rem; color: #88ff88; opacity: 0.8; }
+
+  .avatar-grid {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    max-width: 700px;
+  }
+
+  .avatar-option {
+    background: #1a2a1a; border: 3px solid #33aa33; color: #33ff33;
+    width: 70px; height: 70px; border-radius: 12px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; transition: all 0.15s;
+  }
+  .avatar-option:hover { background: #2a4a2a; transform: scale(1.1); }
+  .avatar-option.selected { border-color: #ffdd33; background: #2a5a2a; box-shadow: 0 0 20px rgba(255,221,51,0.6); transform: scale(1.1); }
+
+  .controls-hint {
+    background: #1a2a1a; border: 2px solid #2a5a2a; border-radius: 8px;
+    padding: 10px 16px; color: #88ff88; font-size: 0.75rem; line-height: 1.6;
+  }
+  .controls-hint kbd {
+    background: #33aa33; color: #000; padding: 2px 8px;
+    border-radius: 4px; font-weight: bold; font-family: inherit;
+    box-shadow: 0 2px 0 #115511; display: inline-block; margin: 0 2px;
+  }
+
+  /* Книга */
+  .book-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.95);
+    border-radius: 8px; display: flex; flex-direction: column;
+    justify-content: flex-start; align-items: center; gap: 12px;
+    z-index: 110; padding: 20px; color: #33ff33;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+  .book-overlay > :first-child { margin-top: auto; }
+  .book-overlay > :last-child { margin-bottom: auto; }
+
+  .book {
+    background: linear-gradient(135deg, #f5e7c8, #e8d5a0);
+    border: 6px solid #7c5f3a;
+    border-radius: 12px;
+    padding: 22px 30px;
+    max-width: 720px;
+    width: 100%;
+    color: #3a2508;
+    box-shadow: 0 0 40px rgba(255,221,51,0.4), inset 0 0 30px rgba(0,0,0,0.1);
+    font-family: 'Georgia', serif;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  .book-title {
+    font-size: 1.3rem;
+    font-weight: 900;
+    text-align: center;
+    margin-bottom: 12px;
+    color: #5a3a08;
+    border-bottom: 2px dashed #7c5f3a;
+    padding-bottom: 8px;
+    font-family: 'Courier New', monospace;
+  }
+
+  .book-text {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    white-space: pre-line;
+    text-align: justify;
+  }
+
+  .book-page-indicator {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #7c5f3a;
+    margin-top: 10px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+  }
+
+  /* Скорочтение: нумерация слов */
+  .book-text .w { position: relative; display: inline-block; margin: 0 5px 0 0; }
+  .book-text .w .wn {
+    position: absolute; top: -0.75em; left: 0;
+    font-size: 0.5rem; line-height: 1; color: #b5651d;
+    font-family: 'Courier New', monospace; font-weight: 700; user-select: none;
+  }
+  .book-text.speed { line-height: 2.1; }
+
+  /* Финальная сцена боя с боссом */
+  .boss-overlay {
+    position: absolute; inset: 0; background: rgba(20,0,0,0.95);
+    border-radius: 8px; display: flex; flex-direction: column;
+    justify-content: flex-start; align-items: center; gap: 14px;
+    z-index: 105; padding: 20px; color: #ff6666;
+    text-align: center;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+  .boss-overlay > :first-child { margin-top: auto; }
+  .boss-overlay > :last-child { margin-bottom: auto; }
+
+  .boss-overlay h1 { color: #ff4444; text-shadow: 0 0 20px #ff0000; }
+
+  /* Кнопка артефакта */
+  .artifact-panel {
+    background: #1a2a1a;
+    border: 3px solid #ffdd33;
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #ffdd33;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  /* ===== Мобильное сенсорное управление ===== */
+  .touch-controls { display: none; }
+  .touch-controls.enabled { display: block; }
+
+  .dpad {
+    position: fixed; left: 14px; bottom: calc(14px + env(safe-area-inset-bottom));
+    width: 168px; height: 168px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 6px; z-index: 90; pointer-events: none;
+  }
+
+  .dpad-btn {
+    pointer-events: auto;
+    background: rgba(26, 74, 26, 0.9);
+    border: 3px solid #33ff33; color: #33ff33;
+    border-radius: 12px; font-size: 1.6rem; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+    box-shadow: 0 0 12px rgba(51, 255, 51, 0.35);
+  }
+  .dpad-btn.pressed { background: #33ff33; color: #000; box-shadow: 0 0 22px #33ff33; }
+  .dpad-btn.up { grid-column: 2; grid-row: 1; }
+  .dpad-btn.left { grid-column: 1; grid-row: 2; }
+  .dpad-btn.right { grid-column: 3; grid-row: 2; }
+  .dpad-btn.down { grid-column: 2; grid-row: 3; }
+
+  .action-btn-touch {
+    position: fixed; right: 20px; bottom: calc(30px + env(safe-area-inset-bottom));
+    width: 96px; height: 96px; border-radius: 50%;
+    background: rgba(74, 26, 26, 0.9);
+    border: 4px solid #ffdd33; color: #ffdd33;
+    font-size: 2.2rem; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit; z-index: 90; pointer-events: auto;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+    box-shadow: 0 0 18px rgba(255, 221, 51, 0.5);
+  }
+  .action-btn-touch.pressed { background: #ffdd33; color: #000; box-shadow: 0 0 30px #ffdd33; }
+
+  /* ===== Тренажёр скорочтения ===== */
+  .trainer-wrap { max-width: 720px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  #trainerMenu { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .trainer-panel { background: #0a0a0a; border: 3px solid #2a5a2a; border-radius: 12px; padding: 14px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .schulte-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: min(90vw, 460px); }
+  .schulte-cell { aspect-ratio: 1 / 1; background: #1a2a1a; border: 2px solid #33aa33; color: #33ff33; font-family: inherit; font-size: 1.2rem; font-weight: bold; border-radius: 8px; cursor: pointer; }
+  .schulte-cell.done { background: #2a5a2a; color: #66ff66; border-color: #66ff66; }
+  .schulte-cell.miss { background: #5a1a1a; border-color: #ff6666; color: #ffaaaa; }
+  .find-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; width: min(94vw, 520px); }
+  .find-cell { aspect-ratio: 1 / 1; background: #1a2a1a; border: 1px solid #2a5a2a; color: #33ff33; font-family: inherit; font-size: 0.8rem; font-weight: bold; border-radius: 4px; cursor: pointer; padding: 0; }
+  .find-cell.done { background: #2a5a2a; color: #aaffaa; }
+  .find-cell.miss { background: #5a1a1a; color: #ffaaaa; }
+  .stroop-word { font-size: 2.4rem; font-weight: 900; letter-spacing: 4px; font-family: inherit; }
+  .stroop-options { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .flash-word { font-size: 2.6rem; font-weight: 900; letter-spacing: 6px; color: #ffdd33; min-height: 3.4rem; font-family: inherit; }
+
+  /* ===== Пре-отсчёт перед скорочтением ===== */
+  .book-text.countdown-hidden { visibility: hidden; }
+  .speed-countdown {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-family: 'Courier New', monospace; font-size: 6rem; font-weight: 900;
+    color: #ffdd33; text-shadow: 0 0 30px #ffaa00; z-index: 130; pointer-events: none;
+    background: rgba(0,0,0,0.25);
+  }
+  .speed-countdown.go { font-size: 3.6rem; color: #66ff66; text-shadow: 0 0 30px #33ff33; }
+  @keyframes countPop { from { transform: scale(1.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .speed-countdown.pop { animation: countPop 0.35s ease-out; }
+
+  @media (max-width: 700px) {
+    .overlay h1 { font-size: 1.1rem; }
+    .overlay p { font-size: 0.7rem; }
+    .option-btn { min-width: 100px; padding: 8px 12px; font-size: 0.7rem; }
+    .option-btn .opt-icon { font-size: 1.4rem; }
+    .avatar-option { width: 55px; height: 55px; font-size: 1.5rem; }
+    .book { padding: 16px 18px; }
+    .book-text { font-size: 0.8rem; }
+    .btn-primary, .btn-secondary { padding: 8px 16px; font-size: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="cabinet">
+    <div class="hud">
+      <div class="hud-item"><span id="playerAvatarHud">🦁</span> <span id="playerNameHud">ИГРОК</span>
+        <div class="hp-mini"><div class="hp-mini-fill player" id="playerMiniHp"></div></div>
+        <span id="playerMiniText">100</span>
+      </div>
+      <div class="hud-item" style="color:#ffdd33;">⚔ ВОПРОС: <span id="qCounter">0/20</span></div>
+      <div class="hud-item">🤖 БОСС
+        <div class="hp-mini"><div class="hp-mini-fill boss" id="bossMiniHp"></div></div>
+        <span id="bossMiniText">100</span>
+      </div>
+      <div class="hud-item" style="color:#ffaa00;">🐱 АРТЕФАКТЫ: <span id="artifactCounter">0/4</span></div>
+      <div class="hud-item" style="color:#ffdd33;">📚 <span id="themeHud">Окружающий мир</span></div>
+      <div class="hud-item" style="color:#88ff88;">🎓 <span id="gradeHud">2 класс</span> · 🎯 <span id="diffHud">средний</span></div>
+      <div class="hud-item"><button type="button" id="settingsBtn" style="background:#1a2a1a;border:2px solid #33aa33;color:#33ff33;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:bold;padding:2px 8px;">⚙ НАСТРОЙКИ</button></div>
+    </div>
+
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+
+    <div class="quiz-panel" id="quizPanel">
+      <div class="quiz-header">
+        <span class="quiz-turn" id="quizTurn">БИТВА С БОССОМ</span>
+        <div class="quiz-stats">
+          <span class="quiz-stat" id="quizStats">✅ 0</span>
+          <span class="quiz-stat" id="quizMode">👤 Игрок</span>
+        </div>
+      </div>
+      <div class="question-text" id="questionText"></div>
+      <div class="answers-row" id="answersRow"></div>
+      <div class="fact-box" id="factBox"></div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+
+    <!-- Стартовый экран с выбором темы и аватара -->
+    <div class="overlay" id="startOverlay">
+      <h1>🐾 ЗВЕРИНАЯ БРОДИЛКА 🐾</h1>
+      <p>Собери 4 из 6 артефактов с котиками (3 математики + 3 геометрии), а затем сразись с боссом в битве знаний!</p>
+
+      <div class="section-title">🎭 ВЫБЕРИ АВАТАР</div>
+      <div class="avatar-grid" id="avatarGrid"></div>
+
+      <div class="section-title">🎓 ВЫБЕРИ КЛАСС</div>
+      <div class="grid-options" id="gradeGrid">
+        <button class="option-btn" data-grade="1">
+          <span class="opt-icon">1️⃣</span>
+          <span class="opt-label">1 КЛАСС</span>
+          <span class="opt-desc">первые шаги: самое простое</span>
+        </button>
+        <button class="option-btn" data-grade="2">
+          <span class="opt-icon">2️⃣</span>
+          <span class="opt-label">2 КЛАСС</span>
+          <span class="opt-desc">простые задания</span>
+        </button>
+        <button class="option-btn" data-grade="3">
+          <span class="opt-icon">3️⃣</span>
+          <span class="opt-label">3 КЛАСС</span>
+          <span class="opt-desc">задания средней трудности</span>
+        </button>
+        <button class="option-btn" data-grade="4">
+          <span class="opt-icon">4️⃣</span>
+          <span class="opt-label">4 КЛАСС</span>
+          <span class="opt-desc">задания посложнее</span>
+        </button>
+        <button class="option-btn" data-grade="5">
+          <span class="opt-icon">5️⃣</span>
+          <span class="opt-label">5 КЛАСС</span>
+          <span class="opt-desc">самые сложные задания</span>
+        </button>
+      </div>
+
+      <div class="section-title">🎯 УРОВЕНЬ СЛОЖНОСТИ</div>
+      <div class="grid-options" id="difficultyGrid">
+        <button class="option-btn" data-diff="easy">
+          <span class="opt-icon">🙂</span>
+          <span class="opt-label">ЛЁГКИЙ</span>
+          <span class="opt-desc">больше HP, дольше таймеры</span>
+        </button>
+        <button class="option-btn" data-diff="normal">
+          <span class="opt-icon">😐</span>
+          <span class="opt-label">СРЕДНИЙ</span>
+          <span class="opt-desc">обычные правила</span>
+        </button>
+        <button class="option-btn" data-diff="hard">
+          <span class="opt-icon">😤</span>
+          <span class="opt-label">СЛОЖНЫЙ</span>
+          <span class="opt-desc">меньше HP, короче таймеры</span>
+        </button>
+      </div>
+
+      <div class="section-title">📚 ВЫБЕРИ ТЕМУ ИГРЫ</div>
+      <div class="grid-options" id="themeGrid">
+        <button class="option-btn" data-theme="world">
+          <span class="opt-icon">🌍</span>
+          <span class="opt-label">ОКРУЖАЮЩИЙ МИР</span>
+        </button>
+        <button class="option-btn" data-theme="math">
+          <span class="opt-icon">🔢</span>
+          <span class="opt-label">МАТЕМАТИКА</span>
+        </button>
+        <button class="option-btn" data-theme="geometry">
+          <span class="opt-icon">📐</span>
+          <span class="opt-label">ГЕОМЕТРИЯ</span>
+        </button>
+        <button class="option-btn" data-theme="english">
+          <span class="opt-icon">🇬🇧</span>
+          <span class="opt-label">АНГЛИЙСКИЙ</span>
+        </button>
+        <button class="option-btn" data-theme="reading">
+          <span class="opt-icon">📖</span>
+          <span class="opt-label">ЧТЕНИЕ</span>
+          <span class="opt-desc">со сказкой</span>
+        </button>
+      </div>
+
+      <div class="section-title" id="readingModeTitle" style="display:none;">📖 РЕЖИМ ЧТЕНИЯ</div>
+      <div class="grid-options" id="readingModeGrid" style="display:none;">
+        <button class="option-btn" data-reading="normal">
+          <span class="opt-icon">📖</span>
+          <span class="opt-label">ОБЫЧНОЕ ЧТЕНИЕ</span>
+          <span class="opt-desc">вопросы по рассказу</span>
+        </button>
+        <button class="option-btn" data-reading="speed">
+          <span class="opt-icon">⚡</span>
+          <span class="opt-label">СКОРОЧТЕНИЕ</span>
+          <span class="opt-desc">60 секунд на текст</span>
+        </button>
+      </div>
+
+      <div class="section-title" id="speedTrainerTitle" style="display:none;">🏋 ТРЕНАЖЁР СКОРОЧТЕНИЯ</div>
+      <div class="grid-options" id="speedTrainerGrid" style="display:none;">
+        <button type="button" class="option-btn" id="speedTrainerBtn">
+          <span class="opt-icon">⚡</span>
+          <span class="opt-label">ОТКРЫТЬ ТРЕНАЖЁР</span>
+          <span class="opt-desc">Шульте · найди слово · струп · вспышка</span>
+        </button>
+      </div>
+
+      <button class="btn-primary" id="startBtn">▶ НАЧАТЬ ИГРУ</button>
+
+      <div class="controls-hint">
+        <span id="desktopHint"><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> движение &nbsp;·&nbsp;
+        <kbd>ПРОБЕЛ</kbd> действие (артефакт / бой)</span>
+        <span id="mobileHint" style="display:none;">📱 На телефоне: двигайся <b>крестовиной</b> слева, действие — кнопка <b>⚡</b> справа</span>
+      </div>
+    </div>
+
+    <!-- Оверлей победы -->
+    <div class="overlay" id="winOverlay" style="display:none;">
+      <h1 id="winTitle">ПОБЕДА!</h1>
+      <p id="winSub"></p>
+      <p id="winStats" style="color:#ffdd33;"></p>
+      <button class="btn-primary" id="restartBtn">🔄 ИГРАТЬ СНОВА</button>
+    </div>
+
+    <!-- Оверлей артефакта -->
+    <div class="overlay" id="artifactOverlay" style="display:none;">
+      <div id="artifactCat" style="display:none; text-align:center; max-width:560px;">
+        <div id="catEmoji" style="font-size:6rem;">🐱</div>
+        <div id="catTitle" style="font-size:1.3rem; font-weight:900; color:#ffdd33; margin:8px 0;"></div>
+        <div id="catStars" style="font-size:1.4rem; letter-spacing:4px; margin:6px 0;"></div>
+        <div id="catJoke" style="background:rgba(255,255,255,0.85); border-radius:12px; padding:12px 16px; font-size:0.9rem; color:#3a2508; font-weight:700; line-height:1.5; margin:10px 0; border:2px dashed #d4a017; white-space:pre-line;"></div>
+        <div id="catFact" style="background:rgba(210,235,255,0.92); border-radius:12px; padding:10px 14px; font-size:0.85rem; color:#12304a; font-weight:700; line-height:1.5; margin:8px 0; border:2px dashed #4a90d9;"></div>
+        <div id="catReward" style="display:none; background:rgba(255,240,180,0.96); border-radius:12px; padding:10px 14px; font-size:0.9rem; color:#5a3a08; font-weight:900; line-height:1.5; margin:8px 0; border:3px solid #d4a017;"></div>
+        <button class="btn-primary" id="catBackBtn">🗺 ВЕРНУТЬСЯ НА КАРТУ</button>
+      </div>
+
+      <div id="artifactMath" style="text-align:center; max-width:560px;">
+        <h1>🐱 АРТЕФАКТ С КОТИКОМ</h1>
+        <div id="artifactMathEmoji" style="font-size:4rem;">🔒</div>
+        <p>Реши задание, чтобы открыть артефакт!</p>
+        <div id="artifactTimerBox" style="margin:8px 0;">
+          <label style="font-size:0.8rem; color:#88ff88; cursor:pointer;"><input type="checkbox" id="artifactTimerCheck"> ⏱ Решать с таймером (60 сек)</label>
+          <div id="artifactTimerBar" style="display:none; font-size:1rem; color:#ffdd33; font-weight:900; margin-top:4px;">⏱ <span id="artifactTimerText">60</span> сек</div>
+        </div>
+        <div id="artifactQuestion" style="background:#111; border:3px dashed #33aa33; border-radius:10px; padding:14px; color:#ccffcc; font-size:1.2rem; font-weight:900; letter-spacing:2px; margin:10px 0;"></div>
+        <div id="artifactAnswers" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:10px 0;"></div>
+        <div id="artifactFeedback" style="font-size:0.9rem; font-weight:bold; min-height:1.4rem; color:#aaffaa; margin-top:6px;"></div>
+        <div id="artifactProgress" style="font-size:0.8rem; color:#ffdd33; margin-top:6px;"></div>
+        <button class="btn-secondary" id="artifactBackBtn" style="margin-top:10px;">← НАЗАД НА КАРТУ</button>
+      </div>
+    </div>
+
+    <!-- Оверлей книги (чтение) -->
+    <div class="book-overlay" id="bookOverlay" style="display:none;">
+      <div class="book">
+        <div class="book-title" id="bookTitle">СКАЗКА</div>
+        <div id="speedHeader" style="display:none; text-align:center; margin-bottom:8px; font-family:'Courier New',monospace;">
+          <div style="font-size:1.1rem; font-weight:900; color:#c0392b;">⏱ <span id="speedTimerText">60</span> сек</div>
+          <div style="font-size:0.8rem; color:#7c5f3a;">Прочитано слов: <span id="speedWordCount">0</span></div>
+        </div>
+        <div class="speed-countdown" id="speedCountdown" style="display:none;"></div>
+        <div class="book-text" id="bookText"></div>
+        <div class="book-page-indicator" id="bookPageIndicator"></div>
+      </div>
+      <div>
+        <button class="btn-primary" id="bookPrevBtn">◀ НАЗАД</button>
+        <button class="btn-primary" id="bookNextBtn">ВПЕРЁД ▶</button>
+        <button class="btn-secondary" id="bookCloseBtn">✕ ЗАКРЫТЬ</button>
+      </div>
+    </div>
+
+    <!-- Оверлей настроек -->
+    <div class="overlay" id="settingsOverlay" style="display:none;">
+      <h1>⚙ НАСТРОЙКИ</h1>
+      <div class="section-title">🐱 СБОР АРТЕФАКТОВ</div>
+      <div class="grid-options">
+        <button type="button" class="option-btn" id="setArtifactsOn">
+          <span class="opt-icon">🧩</span>
+          <span class="opt-label">СОБИРАТЬ</span>
+          <span class="opt-desc">нужно 4 из 6 для боя</span>
+        </button>
+        <button type="button" class="option-btn" id="setArtifactsOff">
+          <span class="opt-icon">⏭</span>
+          <span class="opt-label">ПРОПУСТИТЬ</span>
+          <span class="opt-desc">бой с боссом сразу</span>
+        </button>
+      </div>
+      <p>Если сбор артефактов выключен, к боссу можно идти сразу — котики остаются на карте как бонус.</p>
+      <button type="button" class="btn-primary" id="settingsClose">ГОТОВО</button>
+    </div>
+
+    <!-- Оверлей тренажёра скорочтения -->
+    <div class="overlay" id="speedTrainerOverlay" style="display:none;">
+      <div class="trainer-wrap">
+        <h1 id="trainerTitle">🏋 ТРЕНАЖЁР СКОРОЧТЕНИЯ</h1>
+        <div id="trainerStats" style="color:#ffdd33; font-weight:bold; letter-spacing:1px;"></div>
+        <div id="trainerHint" style="font-size:0.8rem; color:#88ff88; max-width:640px;"></div>
+        <div id="trainerMenu"></div>
+        <div id="trainerArea" class="trainer-panel" style="display:none;"></div>
+        <button type="button" class="btn-secondary" id="trainerClose">✕ ЗАКРЫТЬ ТРЕНАЖЁР</button>
+      </div>
+    </div>
+
+    <!-- Оверлей босса (проверка артефактов) -->
+    <div class="boss-overlay" id="bossGateOverlay" style="display:none;">
+      <h1>⚠ ДОРОГА К БОССУ ЗАКРЫТА</h1>
+      <p style="color:#ffaa88;">Собери 4 из 6 артефактов с котиками, чтобы сразиться с боссом!</p>
+      <p id="bossGateProgress" style="color:#ffdd33; font-size:1rem;"></p>
+      <button class="btn-primary" id="bossGateClose">ОК, ИДУ СОБИРАТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Мобильное сенсорное управление (экранные кнопки) ===== -->
+<div class="touch-controls" id="touchControls">
+  <div class="dpad">
+    <button type="button" class="dpad-btn up" data-dir="up" aria-label="Вверх">▲</button>
+    <button type="button" class="dpad-btn left" data-dir="left" aria-label="Влево">◀</button>
+    <button type="button" class="dpad-btn right" data-dir="right" aria-label="Вправо">▶</button>
+    <button type="button" class="dpad-btn down" data-dir="down" aria-label="Вниз">▼</button>
+  </div>
+  <button type="button" class="action-btn-touch" id="touchActionBtn" aria-label="Действие">⚡</button>
+</div>
+
+<script src="content.js"></script>
+<script src="content-world.js"></script>
+<script src="content-english.js"></script>
+<script src="content-reading.js"></script>
+<script>
+(function() {
+  "use strict";
+
+  // ==================== БАЗА ВОПРОСОВ ПО ТЕМАМ ====================
+  const QUESTION_BANK = {
+    world: [
+      { q: 'Какое животное впадает в спячку зимой?', a: ['Медведь', 'Заяц', 'Лиса', 'Волк'], correct: 0,
+        fact: 'Медведь может спать до 6 месяцев подряд, не просыпаясь!' },
+      { q: 'Какое время года наступает после весны?', a: ['Лето', 'Осень', 'Зима', 'Весна'], correct: 0,
+        fact: 'Лето — самое тёплое время года, потому что Солнце поднимается выше всего над горизонтом.' },
+      { q: 'Что выделяют растения на свету?', a: ['Кислород', 'Углекислый газ', 'Азот', 'Водород'], correct: 0,
+        fact: 'Одно большое дерево за сутки выделяет столько кислорода, сколько нужно трём людям!' },
+      { q: 'Какая птица не умеет летать?', a: ['Пингвин', 'Воробей', 'Синица', 'Снегирь'], correct: 0,
+        fact: 'Пингвины — отличные пловцы! Они развивают скорость до 36 км/ч под водой.' },
+      { q: 'Сколько ног у паука?', a: ['8', '6', '4', '10'], correct: 0,
+        fact: 'У паука 8 ног и 8 глаз! Правда, видит он не очень хорошо.' },
+      { q: 'Какое дерево считается символом России?', a: ['Берёза', 'Дуб', 'Клён', 'Сосна'], correct: 0,
+        fact: 'Берёза может жить до 150 лет! Из её коры раньше делали посуду и обувь.' },
+      { q: 'Кто из этих животных — насекомое?', a: ['Бабочка', 'Паук', 'Червь', 'Улитка'], correct: 0,
+        fact: 'У бабочек вкусовые рецепторы на лапках! Они "пробуют" еду ногами.' },
+      { q: 'Какое животное самое большое на Земле?', a: ['Синий кит', 'Слон', 'Жираф', 'Бегемот'], correct: 0,
+        fact: 'Сердце синего кита размером с небольшой автомобиль!' },
+      { q: 'Где живёт белый медведь?', a: ['В Арктике', 'В Антарктиде', 'В Африке', 'В Австралии'], correct: 0,
+        fact: 'Белый медведь может проплыть до 100 км без отдыха!' },
+      { q: 'Какое животное называют "кораблём пустыни"?', a: ['Верблюд', 'Лошадь', 'Осёл', 'Як'], correct: 0,
+        fact: 'Верблюд может выпить 100 литров воды за 10 минут и обходиться без неё неделю!' },
+      { q: 'Какое из этих животных — млекопитающее?', a: ['Дельфин', 'Акула', 'Осьминог', 'Крокодил'], correct: 0,
+        fact: 'Дельфины дышат воздухом и кормят детёнышей молоком — они млекопитающие!' },
+      { q: 'Что делают ёжики осенью?', a: ['Готовятся к спячке', 'Улетают на юг', 'Меняют цвет', 'Строят гнёзда'], correct: 0,
+        fact: 'Ёжик за лето должен накопить жир, чтобы пережить зиму — иначе он не проснётся!' },
+      { q: 'Какое насекомое опыляет цветы?', a: ['Пчела', 'Комар', 'Муха', 'Таракан'], correct: 0,
+        fact: 'Одна пчела за день может посетить до 5000 цветов!' },
+      { q: 'Что строит бобр?', a: ['Плотины', 'Гнёзда', 'Норы', 'Ульи'], correct: 0,
+        fact: 'Бобры строят плотины из веток и глины, чтобы поднять уровень воды в реке!' },
+      { q: 'Какое животное меняет цвет зимой?', a: ['Заяц-беляк', 'Лиса', 'Волк', 'Медведь'], correct: 0,
+        fact: 'Заяц-беляк зимой становится белоснежным, чтобы прятаться от хищников!' },
+      { q: 'Что такое "листопад"?', a: ['Сброс листьев осенью', 'Полив растений', 'Сбор урожая', 'Рост травы'], correct: 0,
+        fact: 'Деревья сбрасывают листья, чтобы не терять влагу зимой!' },
+      { q: 'Какое море самое солёное?', a: ['Мёртвое море', 'Чёрное море', 'Красное море', 'Балтийское море'], correct: 0,
+        fact: 'В Мёртвом море так много соли, что в нём невозможно утонуть!' },
+      { q: 'Что такое роса?', a: ['Капли воды на траве утром', 'Иней на ветках', 'Туман в небе', 'Дождь вечером'], correct: 0,
+        fact: 'Роса образуется ночью, когда воздух охлаждается и влага оседает на растениях.' },
+      { q: 'Что происходит с водой при 0°C?', a: ['Замерзает', 'Кипит', 'Испаряется', 'Ничего'], correct: 0,
+        fact: 'Лёд легче воды, поэтому айсберги не тонут!' },
+      { q: 'Что нужно для горения?', a: ['Кислород', 'Углекислый газ', 'Азот', 'Водород'], correct: 0,
+        fact: 'Без кислорода огонь гаснет — поэтому на пожарах нельзя открывать окна!' },
+    ],
+    math: [
+      { q: '5 + 7 = ?', a: ['12', '11', '13', '10'], correct: 0, fact: '5 + 7 = 12. Можно проверить: 7 + 5 — тоже 12!' },
+      { q: '15 − 8 = ?', a: ['7', '6', '8', '9'], correct: 0, fact: '15 − 8 = 7. А если 7 + 8, снова получим 15!' },
+      { q: 'Сколько будет 6 × 3?', a: ['18', '15', '21', '12'], correct: 0, fact: '6 × 3 = 18. Это как 6 + 6 + 6!' },
+      { q: 'Чему равно 20 : 4?', a: ['5', '4', '6', '8'], correct: 0, fact: '20 : 4 = 5. Проверка: 5 × 4 = 20!' },
+      { q: '9 + 6 = ?', a: ['15', '14', '16', '13'], correct: 0, fact: '9 + 6 = 15. Отличный пример на сложение с переходом через десяток!' },
+      { q: '17 − 9 = ?', a: ['8', '7', '9', '6'], correct: 0, fact: '17 − 9 = 8. Можно считать: 17 − 7 = 10, потом 10 − 2 = 8.' },
+      { q: 'Сколько сантиметров в 1 метре?', a: ['100', '10', '1000', '50'], correct: 0, fact: 'В 1 метре 100 сантиметров!' },
+      { q: 'Как называется результат сложения?', a: ['Сумма', 'Разность', 'Произведение', 'Частное'], correct: 0, fact: 'Сумма — результат сложения. Разность — вычитания, произведение — умножения, частное — деления.' },
+      { q: '7 × 2 = ?', a: ['14', '12', '16', '9'], correct: 0, fact: '7 × 2 = 14. Умножение на 2 — это удвоение числа!' },
+      { q: '30 : 5 = ?', a: ['6', '5', '7', '8'], correct: 0, fact: '30 : 5 = 6. Проверка: 6 × 5 = 30!' },
+      { q: 'Что больше: 45 или 54?', a: ['54', '45', 'Одинаково', 'Нельзя сравнить'], correct: 0, fact: '54 > 45, потому что 5 десятков больше 4 десятков!' },
+      { q: 'Чему равно 100 − 37?', a: ['63', '73', '67', '53'], correct: 0, fact: '100 − 37 = 63. Удобно вычитать по частям: 100 − 30 = 70, 70 − 7 = 63.' },
+      { q: 'Сколько минут в 1 часе?', a: ['60', '30', '100', '90'], correct: 0, fact: 'В 1 часе 60 минут, а в минуте 60 секунд!' },
+      { q: '3 × 4 = ?', a: ['12', '9', '16', '7'], correct: 0, fact: '3 × 4 = 12. Это как 3 + 3 + 3 + 3!' },
+      { q: 'Что такое периметр?', a: ['Сумма длин всех сторон', 'Площадь фигуры', 'Объём', 'Высота'], correct: 0, fact: 'Периметр — это сумма длин всех сторон фигуры!' },
+      { q: 'У Пети было 12 яблок, 5 он отдал. Сколько осталось?', a: ['7', '6', '8', '5'], correct: 0, fact: '12 − 5 = 7. Задача на вычитание!' },
+      { q: 'Какое число идёт после 89?', a: ['90', '88', '91', '80'], correct: 0, fact: 'После 89 идёт 90 — начало нового десятка!' },
+      { q: 'Чему равно 8 × 2?', a: ['16', '14', '18', '10'], correct: 0, fact: '8 × 2 = 16 — это удвоенная восьмёрка!' },
+      { q: 'У Маши 3 коробки по 6 конфет. Сколько всего?', a: ['18', '15', '9', '21'], correct: 0, fact: '3 × 6 = 18. Умножение заменяет сложение одинаковых чисел!' },
+      { q: 'Какое число чётное?', a: ['8', '7', '9', '5'], correct: 0, fact: 'Чётные числа делятся на 2 без остатка: 2, 4, 6, 8, 10...' },
+    ],
+    geometry: [
+      { q: 'Сколько сторон у треугольника?', a: ['3', '4', '5', '6'], correct: 0, fact: 'У треугольника 3 стороны и 3 угла!' },
+      { q: 'Как называется фигура с 4 равными сторонами и прямыми углами?', a: ['Квадрат', 'Прямоугольник', 'Ромб', 'Трапеция'], correct: 0, fact: 'Квадрат — это прямоугольник с равными сторонами!' },
+      { q: 'Сколько градусов в прямом угле?', a: ['90', '45', '180', '360'], correct: 0, fact: 'Прямой угол равен 90 градусам — как угол книги!' },
+      { q: 'Что такое круг?', a: ['Фигура без углов', 'Фигура с 4 углами', 'Фигура с 3 углами', 'Ломаная линия'], correct: 0, fact: 'У круга нет углов! Все точки на одинаковом расстоянии от центра.' },
+      { q: 'Как называется линия, у которой есть начало и конец?', a: ['Отрезок', 'Луч', 'Прямая', 'Кривая'], correct: 0, fact: 'Отрезок имеет два конца, луч — начало, но нет конца, а прямая бесконечна в обе стороны!' },
+      { q: 'Сколько сторон у пятиугольника?', a: ['5', '4', '6', '7'], correct: 0, fact: 'Пентагон в США — здание в форме пятиугольника!' },
+      { q: 'Какая фигура получится, если соединить 4 равных квадрата?', a: ['Прямоугольник', 'Круг', 'Треугольник', 'Ромб'], correct: 0, fact: 'Если сложить 4 квадрата в линию, получится прямоугольник!' },
+      { q: 'Что измеряют в квадратных сантиметрах?', a: ['Площадь', 'Длину', 'Объём', 'Массу'], correct: 0, fact: 'Площадь измеряется в квадратных единицах: см², м², км²!' },
+      { q: 'Сколько вершин у куба?', a: ['8', '6', '12', '4'], correct: 0, fact: 'У куба 8 вершин, 6 граней и 12 рёбер!' },
+      { q: 'Как называется точка, где сходятся стороны угла?', a: ['Вершина', 'Центр', 'Основание', 'Край'], correct: 0, fact: 'Вершина угла — место, где встречаются два луча!' },
+      { q: 'Что тяжелее: круг или квадрат такого же размера?', a: ['Зависит от материала', 'Круг', 'Квадрат', 'Одинаково'], correct: 0, fact: 'Вес зависит от материала, а не от формы!' },
+      { q: 'Сколько осей симметрии у круга?', a: ['Бесконечно много', '4', '2', '1'], correct: 0, fact: 'У круга бесконечно много осей симметрии — любая прямая через центр!' },
+      { q: 'Как называется фигура с 6 сторонами?', a: ['Шестиугольник', 'Пятиугольник', 'Семиугольник', 'Восьмиугольник'], correct: 0, fact: 'Пчелиные соты — это шестиугольники! Они самые прочные.' },
+      { q: 'Сколько углов у прямоугольника?', a: ['4', '3', '5', '6'], correct: 0, fact: 'У прямоугольника 4 прямых угла по 90 градусов!' },
+      { q: 'Что такое периметр?', a: ['Сумма длин всех сторон', 'Площадь фигуры', 'Объём', 'Высота'], correct: 0, fact: 'Периметр — это сумма длин всех сторон фигуры!' },
+      { q: 'Какая фигура не имеет углов?', a: ['Круг', 'Квадрат', 'Треугольник', 'Ромб'], correct: 0, fact: 'Круг и овал — фигуры без углов!' },
+      { q: 'Если сторона квадрата 5 см, чему равен периметр?', a: ['20 см', '10 см', '25 см', '15 см'], correct: 0, fact: 'Периметр квадрата = 4 × сторона = 4 × 5 = 20 см!' },
+      { q: 'Как называется объёмная фигура с круглым основанием?', a: ['Цилиндр', 'Куб', 'Шар', 'Пирамида'], correct: 0, fact: 'Цилиндр — как банка! У него два круглых основания.' },
+      { q: 'Сколько граней у куба?', a: ['6', '4', '8', '12'], correct: 0, fact: 'У куба 6 граней — как у игрального кубика!' },
+      { q: 'Что такое диаметр?', a: ['Отрезок через центр', 'Радиус', 'Половина круга', 'Касательная'], correct: 0, fact: 'Диаметр — это отрезок через центр круга. Он в 2 раза больше радиуса!' },
+    ],
+    english: [
+      { q: 'Как по-английски "кот"?', a: ['Cat', 'Dog', 'Bird', 'Fish'], correct: 0, fact: 'Cat [кэт] — кот или кошка!' },
+      { q: 'Как по-английски "собака"?', a: ['Dog', 'Cat', 'Cow', 'Pig'], correct: 0, fact: 'Dog [дог] — собака!' },
+      { q: 'Как по-английски "яблоко"?', a: ['Apple', 'Banana', 'Orange', 'Pear'], correct: 0, fact: 'Apple [эпл] — яблоко!' },
+      { q: 'Как по-английски "красный"?', a: ['Red', 'Blue', 'Green', 'Yellow'], correct: 0, fact: 'Red [рэд] — красный!' },
+      { q: 'Как по-английски "один"?', a: ['One', 'Two', 'Three', 'Four'], correct: 0, fact: 'One [уан] — один!' },
+      { q: 'Как по-английски "мама"?', a: ['Mother', 'Father', 'Sister', 'Brother'], correct: 0, fact: 'Mother [мазэ] — мама! Сокращённо — mom.' },
+      { q: 'Как по-английски "школа"?', a: ['School', 'Home', 'Park', 'Shop'], correct: 0, fact: 'School [скул] — школа!' },
+      { q: 'Как по-английски "друг"?', a: ['Friend', 'Brother', 'Teacher', 'Doctor'], correct: 0, fact: 'Friend [фрэнд] — друг!' },
+      { q: 'Как по-английски "солнце"?', a: ['Sun', 'Moon', 'Star', 'Sky'], correct: 0, fact: 'Sun [сан] — солнце!' },
+      { q: 'Как по-английски "вода"?', a: ['Water', 'Milk', 'Juice', 'Tea'], correct: 0, fact: 'Water [уотэ] — вода!' },
+      { q: 'Как по-английски "жёлтый"?', a: ['Yellow', 'Red', 'Blue', 'Black'], correct: 0, fact: 'Yellow [йелоу] — жёлтый!' },
+      { q: 'Как по-английски "три"?', a: ['Three', 'One', 'Two', 'Five'], correct: 0, fact: 'Three [сри] — три!' },
+      { q: 'Как по-английски "дом"?', a: ['House', 'Tree', 'Car', 'Book'], correct: 0, fact: 'House [хаус] — дом!' },
+      { q: 'Как по-английски "книга"?', a: ['Book', 'Pen', 'Bag', 'Table'], correct: 0, fact: 'Book [бук] — книга!' },
+      { q: 'Как по-английски "птица"?', a: ['Bird', 'Fish', 'Cat', 'Dog'], correct: 0, fact: 'Bird [бёд] — птица!' },
+      { q: 'Как по-английски "зелёный"?', a: ['Green', 'Blue', 'Red', 'White'], correct: 0, fact: 'Green [грин] — зелёный!' },
+      { q: 'Как по-английски "хорошо"?', a: ['Good', 'Bad', 'Big', 'Small'], correct: 0, fact: 'Good [гуд] — хорошо!' },
+      { q: 'Как по-английски "пять"?', a: ['Five', 'Four', 'Six', 'Seven'], correct: 0, fact: 'Five [файв] — пять!' },
+      { q: 'Как по-английски "спасибо"?', a: ['Thank you', 'Hello', 'Goodbye', 'Please'], correct: 0, fact: 'Thank you [сэнк ю] — спасибо!' },
+      { q: 'Как по-английски "привет"?', a: ['Hello', 'Goodbye', 'Sorry', 'Please'], correct: 0, fact: 'Hello [хэллоу] — привет!' },
+    ],
+    reading: [
+      { q: 'Кто написал сказку "Колобок"?', a: ['Русский народ', 'Пушкин', 'Толстой', 'Андерсен'], correct: 0, fact: '«Колобок» — русская народная сказка, её рассказывали из поколения в поколение!' },
+      { q: 'Кто написал "Сказку о рыбаке и рыбке"?', a: ['А.С. Пушкин', 'Л.Н. Толстой', 'К.И. Чуковский', 'С.Я. Маршак'], correct: 0, fact: 'А.С. Пушкин написал эту сказку в 1833 году!' },
+      { q: 'Кто из героев сказок был самым маленьким?', a: ['Мальчик-с-пальчик', 'Буратино', 'Чиполлино', 'Карлсон'], correct: 0, fact: 'Мальчик-с-пальчик был размером с мизинец!' },
+      { q: 'Кто написал "Доктора Айболита"?', a: ['К.И. Чуковский', 'С.Я. Маршак', 'А.Л. Барто', 'Э. Успенский'], correct: 0, fact: 'Корней Чуковский написал "Айболита" по мотивам сказки про доктора Дулиттла!' },
+      { q: 'Что потеряла Золушка на балу?', a: ['Хрустальную туфельку', 'Платок', 'Кольцо', 'Шляпку'], correct: 0, fact: 'Золушка потеряла хрустальную туфельку, и принц искал её по всему королевству!' },
+      { q: 'Кто такая Баба-Яга?', a: ['Сказочная волшебница', 'Принцесса', 'Русалка', 'Фея'], correct: 0, fact: 'Баба-Яга живёт в избушке на курьих ножках в лесу!' },
+      { q: 'Кто написал "Три медведя"?', a: ['Л.Н. Толстой', 'А.С. Пушкин', 'К.И. Чуковский', 'С.В. Михалков'], correct: 0, fact: 'Лев Толстой пересказал английскую сказку "Три медведя" для русских детей!' },
+      { q: 'Как звали девочку из сказки "Красная Шапочка"?', a: ['Красная Шапочка', 'Золушка', 'Белоснежка', 'Дюймовочка'], correct: 0, fact: 'Красная Шапочка получила своё имя из-за шапочки, которую ей подарила бабушка!' },
+      { q: 'Кто написал "Муху-Цокотуху"?', a: ['К.И. Чуковский', 'А.Л. Барто', 'С.Я. Маршак', 'Э. Успенский'], correct: 0, fact: 'Корней Чуковский написал "Муху-Цокотуху" за один день!' },
+      { q: 'Кто съел Колобка?', a: ['Лиса', 'Волк', 'Медведь', 'Заяц'], correct: 0, fact: 'Хитрая Лиса съела Колобка, потому что он ей поверил!' },
+      { q: 'Кто написал "Сказку о царе Салтане"?', a: ['А.С. Пушкин', 'К.И. Чуковский', 'Л.Н. Толстой', 'С.Я. Маршак'], correct: 0, fact: 'Пушкин написал эту сказку в стихах!' },
+      { q: 'Как звали друга Карлсона?', a: ['Малыш', 'Буратино', 'Пьеро', 'Незнайка'], correct: 0, fact: 'Карлсон жил на крыше и дружил с Малышом!' },
+      { q: 'Что просил старик у золотой рыбки сначала?', a: ['Новое корыто', 'Избу', 'Дворец', 'Машину'], correct: 0, fact: 'Старуха сначала попросила новое корыто — а потом захотела стать царицей!' },
+      { q: 'Кто написал "Федорино горе"?', a: ['К.И. Чуковский', 'А.Л. Барто', 'С.В. Михалков', 'Э. Успенский'], correct: 0, fact: 'Это сказка про бабушку Федору, от которой убежала вся посуда!' },
+      { q: 'Кто такая Дюймовочка?', a: ['Маленькая девочка', 'Принцесса', 'Фея', 'Королева'], correct: 0, fact: 'Дюймовочка была ростом с дюйм — примерно 2,5 см!' },
+      { q: 'Кто написал "Мойдодыра"?', a: ['К.И. Чуковский', 'С.Я. Маршак', 'А.Л. Барто', 'С.В. Михалков'], correct: 0, fact: '"Мойдодыр" — сказка про мальчика-грязнулю и умывальник!' },
+      { q: 'Что потерял ослик Иа?', a: ['Хвост', 'Уши', 'Шляпу', 'Друзей'], correct: 0, fact: 'Ослик Иа потерял свой хвост, и друзья помогли его найти!' },
+      { q: 'Кто написал "Дядю Стёпу"?', a: ['С.В. Михалков', 'А.Л. Барто', 'К.И. Чуковский', 'Э. Успенский'], correct: 0, fact: 'Сергей Михалков написал "Дядю Стёпу" — про очень высокого милиционера!' },
+      { q: 'Кто такая Русалочка?', a: ['Морская дева', 'Принцесса', 'Фея', 'Королева'], correct: 0, fact: 'Русалочка — героиня сказки Андерсена, которая полюбила принца!' },
+      { q: 'Как звали трёх поросят?', a: ['Ниф-Ниф, Нуф-Нуф, Наф-Наф', 'Раз, Два, Три', 'Первый, Второй, Третий', 'Бим, Бом, Бам'], correct: 0, fact: 'Ниф-Ниф, Нуф-Нуф и Наф-Наф построили три домика!' },
+    ],
+  };
+
+  // ==================== СКАЗКИ ДЛЯ ЧТЕНИЯ ====================
+  const STORIES = [
+    {
+      title: '🌟 ЗВЁЗДОЧКА И ЛУНА',
+      pages: [
+        'Жила-была на небе маленькая Звёздочка. Она была совсем крошечная, но очень любопытная. Каждую ночь Звёздочка смотрела вниз на Землю и удивлялась: какие красивые там леса, реки и города!\n\n— Луна, — спросила однажды Звёздочка, — а почему я такая маленькая, а ты такая большая?\n\n— Потому что я старше, — улыбнулась Луна. — Но знаешь, малышка, каждая звёздочка важна. Без вас, маленьких, небо было бы пустым и грустным.',
+        'Звёздочка задумалась. Она посмотрела на других звёзд — их было так много! Все они мерцали и переливались.\n\nВдруг внизу, на Земле, она увидела мальчика. Он сидел на крыше и плакал.\n\n— Почему ты плачешь? — тихо спросила Звёздочка.\n\n— Я потерял дорогу домой, — ответил мальчик. — И мне очень страшно.\n\nЗвёздочка засияла изо всех сил. Она светила так ярко, как только могла. И мальчик увидел тропинку, которая вела к его дому.\n\n— Спасибо тебе, маленькая звёздочка! — крикнул он и побежал домой.\n\nС тех пор Звёздочка поняла: даже если ты маленький, ты можешь помочь кому-то большому. Главное — светить изо всех сил!',
+      ],
+    },
+    {
+      title: '🐻 МЕДВЕЖОНОК И ПЧЕЛЫ',
+      pages: [
+        'В одном лесу жил медвежонок по имени Топтыжка. Он очень любил мёд, но боялся пчёл.\n\n— Топтыжка, — говорила ему мама, — пчёлы не злые. Они просто защищают свой дом.\n\nНо Топтыжка не верил. Он думал, что пчёлы только и мечтают о том, чтобы его укусить. Поэтому он всегда обходил ульи стороной.\n\nОднажды в лесу случился пожар. Маленький огонёк от костра путешественников перекинулся на сухую траву и начал быстро распространяться. Все звери испугались и побежали кто куда.',
+        'Топтыжка бежал вместе со всеми, но вдруг вспомнил: рядом с ульями остались маленькие медвежата! Он остановился.\n\n— Надо их спасти! — крикнул он и побежал обратно.\n\nОгонь подбирался к ульям. А вокруг них уже кружились пчёлы — они тоже чувствовали беду.\n\n— Пчёлы! — закричал Топтыжка. — Помогите мне! Нужно вынести медвежат!\n\nИ тут случилось чудо. Пчёлы поняли медвежонка. Они поднялись в воздух и полетели к медвежатам. Своим жужжанием они указали ему путь сквозь дым.',
+        'Топтыжка вынес всех медвежат из огня. А пчёлы помогли потушить маленькие искры, которые падали на ульи.\n\nКогда пожар закончился, все звери собрались вместе. Медвежата обнимали Топтыжку, а пчёлы кружились над ним и жужжали что-то доброе.\n\n— Простите, что я вас боялся, — сказал Топтыжка. — Вы самые храбрые пчёлы на свете!\n\nС тех пор Топтыжка и пчёлы стали друзьями. И медвежонок понял: не важно, кто ты — большой медведь или маленькая пчела. Важно то, что у тебя доброе сердце.',
+      ],
+    },
+    {
+      title: '🐟 РЫБКА И МОРСКАЯ ЗВЕЗДА',
+      pages: [
+        'На дне синего моря жила маленькая рыбка по имени Искорка. Она была очень красивая — её чешуя переливалась всеми цветами радуги. Но Искорка была грустная, потому что не умела делать ничего особенного. Другие рыбы умели быстро плавать, осьминоги — менять цвет, а она... просто красиво блестела.\n\n— Зачем я нужна? — спрашивала Искорка у морской звезды. — От меня никакой пользы.',
+        'Морская звезда улыбнулась и сказала:\n\n— Подожди, скоро ты всё поймёшь.\n\nОднажды в море заплыл маленький китёнок. Он потерял свою маму и очень испугался. Китёнок плакал и не знал, куда плыть. Кругом было темно и холодно.\n\nИскорка увидела китёнка и подплыла к нему.\n\n— Не плачь! — сказала она. — Я помогу тебе.\n\n— Но как? — всхлипнул китёнок. — Ты такая маленькая!',
+        'Искорка засияла изо всех сил! Её чешуя засветилась так ярко, что осветила весь путь до мамы-кита. Китёнок поплыл за этим светом и вскоре нашёл свою маму.\n\n— Спасибо, маленькая рыбка! — сказала мама-кит. — Ты спасла моего сына!\n\nС тех пор Искорка поняла: даже самый маленький свет может осветить путь тому, кто потерялся. И больше никогда не грустила.',
+      ],
+    },
+  ];
+
+  // ==================== ВОПРОСЫ ПО РАССКАЗАМ ====================
+  const STORY_QUESTIONS = {
+    '🌟 ЗВЁЗДОЧКА И ЛУНА': [
+      { q: 'Почему Звёздочка была маленькой, а Луна большой?', a: ['Луна была старше', 'Луна была ярче', 'Звёздочка спала днём', 'Луна светила ближе'], correct: 0, fact: 'Луна объяснила, что она просто старше, но каждая звёздочка важна.' },
+      { q: 'Кого Звёздочка увидела внизу на Земле?', a: ['Мальчика на крыше', 'Кота во дворе', 'Птицу в гнезде', 'Девочку в саду'], correct: 0, fact: 'Мальчик сидел на крыше и плакал.' },
+      { q: 'Почему мальчик плакал?', a: ['Он потерял дорогу домой', 'Он упал с крыши', 'Он потерял игрушку', 'Он замёрз'], correct: 0, fact: 'Мальчик потерял дорогу домой и очень боялся.' },
+      { q: 'Как Звёздочка помогла мальчику?', a: ['Засияла и осветила тропинку', 'Спустилась на землю', 'Позвала Луну', 'Нарисовала карту'], correct: 0, fact: 'Звёздочка засияла изо всех сил и осветила путь домой.' },
+      { q: 'Что сказала Луна про маленьких звёздочек?', a: ['Без них небо было бы пустым и грустным', 'Что они мешают', 'Что они гаснут', 'Что они спят до утра'], correct: 0, fact: 'Каждая звёздочка важна — без них небо пустое.' },
+      { q: 'Чему удивлялась Звёздочка, глядя на Землю?', a: ['Лесам, рекам и городам', 'Тучам и дождю', 'Горам и вулканам', 'Пещерам'], correct: 0, fact: 'Звёздочка любовалась красивыми лесами, реками и городами.' },
+      { q: 'Что поняла Звёздочка в конце сказки?', a: ['Даже маленький может помочь большому', 'Что она совсем не нужна', 'Что надо светить по очереди', 'Что нужно спать днём'], correct: 0, fact: 'Главное — светить изо всех сил, даже если ты маленький.' },
+      { q: 'Куда побежал мальчик?', a: ['Домой', 'В лес', 'К реке', 'В школу'], correct: 0, fact: 'Он увидел тропинку и побежал домой.' },
+    ],
+    '🐻 МЕДВЕЖОНОК И ПЧЕЛЫ': [
+      { q: 'Как звали медвежонка?', a: ['Топтыжка', 'Мишутка', 'Косолапый', 'Бурый'], correct: 0, fact: 'Медвежонка звали Топтыжка.' },
+      { q: 'Чего боялся Топтыжка?', a: ['Пчёл', 'Воды', 'Грозы', 'Темноты'], correct: 0, fact: 'Он очень любил мёд, но боялся пчёл.' },
+      { q: 'Что говорила мама про пчёл?', a: ['Пчёлы не злые, они защищают свой дом', 'Пчёлы спят зимой', 'Пчёлы любят мёд', 'Пчёлы живут в норах'], correct: 0, fact: 'Пчёлы просто защищают свой дом.' },
+      { q: 'Что случилось однажды в лесу?', a: ['Пожар', 'Сильный дождь', 'Землетрясение', 'Наводнение'], correct: 0, fact: 'Огонёк от костра перекинулся на сухую траву.' },
+      { q: 'Кого спасал Топтыжка?', a: ['Медвежат', 'Зайчат', 'Лисят', 'Птиц'], correct: 0, fact: 'Рядом с ульями остались маленькие медвежата.' },
+      { q: 'Как пчёлы помогли медвежонку?', a: ['Жужжанием указали путь сквозь дым', 'Потушили весь огонь', 'Унесли медвежат', 'Позвали людей'], correct: 0, fact: 'Пчёлы поднялись в воздух и указали путь сквозь дым.' },
+      { q: 'Что сделали пчёлы после пожара?', a: ['Потушили искры на ульях', 'Построили новый дом', 'Собрали весь мёд', 'Улетели на юг'], correct: 0, fact: 'Пчёлы помогли потушить маленькие искры.' },
+      { q: 'Что понял медвежонок в конце?', a: ['Важно, что у тебя доброе сердце', 'Что пчёлы опасны', 'Что мёд важнее дружбы', 'Что надо бояться всех'], correct: 0, fact: 'Важно не кто ты, а какое у тебя сердце.' },
+    ],
+    '🐟 РЫБКА И МОРСКАЯ ЗВЕЗДА': [
+      { q: 'Как звали маленькую рыбку?', a: ['Искорка', 'Звёздочка', 'Блёстка', 'Радужка'], correct: 0, fact: 'Рыбку звали Искорка.' },
+      { q: 'Почему Искорка грустила?', a: ['Она не умела делать ничего особенного', 'Её обижали рыбы', 'Она была голодна', 'Она потеряла дом'], correct: 0, fact: 'Искорке казалось, что от неё нет пользы.' },
+      { q: 'Чем была особенная чешуя Искорки?', a: ['Переливалась всеми цветами радуги', 'Была золотой', 'Была серебряной', 'Была прозрачной'], correct: 0, fact: 'Чешуя Искорки переливалась всеми цветами радуги.' },
+      { q: 'Кого однажды встретила Искорка?', a: ['Маленького китёнка', 'Осьминога', 'Акулу', 'Черепаху'], correct: 0, fact: 'В море заплыл маленький китёнок.' },
+      { q: 'Почему китёнок плакал?', a: ['Он потерял свою маму', 'Он потерял еду', 'Он испугался шторма', 'Он замёрз'], correct: 0, fact: 'Китёнок потерял маму и не знал, куда плыть.' },
+      { q: 'Как Искорка помогла китёнку?', a: ['Засияла и осветила путь', 'Позвала других рыб', 'Дала ему еды', 'Показала карту'], correct: 0, fact: 'Её свет осветил путь до мамы-кита.' },
+      { q: 'Что сказала мама-кит рыбке?', a: ['Ты спасла моего сына', 'Спасибо за игру', 'Иди домой', 'Ты очень большая'], correct: 0, fact: 'Мама-кит поблагодарила Искорку за спасение сына.' },
+      { q: 'Что поняла Искорка?', a: ['Даже самый маленький свет освещает путь', 'Что она бесполезна', 'Что надо молчать', 'Что море очень опасное'], correct: 0, fact: 'Даже маленький свет может осветить путь потерявшемуся.' },
+    ],
+  };
+
+  // ==================== БАЗА АРТЕФАКТОВ ====================
+  const CAT_ARTIFACTS = [
+    { emoji: '😹', title: 'КОТИК-ХОХОТУН', joke: '— Почему коты не играют в карты?\n— Боятся, что украдут "козырного" кота! 🃏', stars: '⭐⭐⭐' },
+    { emoji: '😻', title: 'КОТИК-ВЛЮБЛЁННЫЙ', joke: 'Кот смотрит в зеркало:\n— Какой же я красивый! Надо пометить это место! 🐾', stars: '⭐⭐⭐⭐' },
+    { emoji: '🙀', title: 'КОТИК-ИСПУГАННЫЙ', joke: '— Кот, ты чего испугался?\n— Я увидел пылесос! Он хочет меня съесть! 😱', stars: '⭐⭐' },
+    { emoji: '😼', title: 'КОТИК-ХИТРЫЙ', joke: '— Кот, ты съел рыбу?\n— Нет!\n— А почему усы в чешуе?\n— Это лак для усов! 😼', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '😽', title: 'КОТИК-ЛАСКОВЫЙ', joke: '— Мама, я тебя так люблю!\n— Я тоже, только не садись на мою голову! 😽', stars: '⭐⭐⭐⭐' },
+    { emoji: '😸', title: 'КОТИК-УЛЫБАКА', joke: '— Как дела, кот?\n— Поймал солнечный зайчик!\n— И где он?\n— Убежал... Но было весело! 😸', stars: '⭐⭐⭐' },
+    { emoji: '😺', title: 'КОТИК-ДОВОЛЬНЫЙ', joke: 'Кот на подоконнике:\n— Хорошо быть котом: спишь, ешь, все гладят. Мечта! 😺', stars: '⭐⭐⭐⭐' },
+    { emoji: '😿', title: 'КОТИК-ГРУСТНЫЙ', joke: '— Кот, ты чего грустишь?\n— Хозяин ушёл... Кто меня кормить будет?\n— Автокормушка?\n— Она не гладит! 😿', stars: '⭐⭐' },
+    { emoji: '😾', title: 'КОТИК-СЕРДИТЫЙ', joke: '— Кот, ты чего сердитый?\n— Разбудили в 5 утра!\n— Кто?\n— Я сам! Захотел есть! 😾', stars: '⭐⭐⭐' },
+    { emoji: '🙀', title: 'КОТИК-ИЗУМЛЁННЫЙ', joke: 'Кот увидел свой хвост:\n— Что это?! Оно двигается! Ловить!\nЧерез час:\n— Так это был я... 🙀', stars: '⭐⭐⭐⭐' },
+    { emoji: '😹', title: 'КОТИК-ПРОКАЗНИК', joke: '— Кто разбил вазу?\n— Не я!\n— А кто?\n— Ветер!\n— Окна закрыты...\n— Значит, сильный ветер! 😹', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '😻', title: 'КОТИК-ОБНИМАШКА', joke: 'Кот обнимает хозяина:\n— Мур! Ты мой любимый!\n— А кто кормит?\n— Ты! Но люблю не за это... Хотя и за это! 😻', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '😽', title: 'КОТИК-ПЕВЕЦ', joke: 'Кот поёт в 3 ночи:\n— Мя-я-я-у!\n— Ты почему не спишь?\n— А кто сказал, что я не сплю? Я пою во сне! 😽', stars: '⭐⭐⭐' },
+    { emoji: '😸', title: 'КОТИК-ФИЛОСОФ', joke: 'Кот смотрит в окно:\n— Жизнь — как коробка. Не знаешь, что внутри... пока не залезешь! 😸', stars: '⭐⭐⭐⭐' },
+    { emoji: '😺', title: 'КОТИК-ПОВАР', joke: '— Кот, это всё для тебя?\n— Нет, я готовлю для семьи!\n— А если не съедят?\n— Тогда для себя! 😺', stars: '⭐⭐⭐⭐' },
+    { emoji: '😹', title: 'КОТИК-СПОРТСМЕН', joke: '— Кот, ты чего?\n— Готовлюсь к Олимпиаде по сну!\n— Это моя дисциплина! 😹', stars: '⭐⭐⭐' },
+    { emoji: '🙀', title: 'КОТИК-ДЕТЕКТИВ', joke: 'Кот расследует пропажу:\n— Следы на кухню... Улика — усы в сметане! Дело закрыто! 🙀', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '😼', title: 'КОТИК-БОСС', joke: 'Кот на столе:\n— План: покормить меня, погладить, поиграть. Вопросы? 😼', stars: '⭐⭐⭐⭐' },
+    { emoji: '😽', title: 'КОТИК-МУДРЕЦ', joke: '— Кот, в чём смысл жизни?\n— Найти тёплое место и спать. Потом поесть. И снова спать. 😽', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '😸', title: 'КОТИК-МЕЧТАТЕЛЬ', joke: '— Вот бы крылья... Летал бы, пугал голубей! Хотя я и так их пугаю! 😸', stars: '⭐⭐⭐' },
+  ];
+
+  // Артефакты — не только коты: другие звери и герои
+  const MORE_ARTIFACT_CARDS = [
+    { emoji: '🦁', title: 'ЛЕВ-ХРАБРЕЦ', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '🐯', title: 'ТИГРЁНОК-БЕГУН', stars: '⭐⭐⭐⭐' },
+    { emoji: '🦊', title: 'ЛИСЁНОК-ХИТРЕЦ', stars: '⭐⭐⭐⭐' },
+    { emoji: '🐺', title: 'ВОЛЧОНОК-ДРУГ', stars: '⭐⭐⭐' },
+    { emoji: '🐻', title: 'МЕДВЕЖОНОК-СЛАДКОЕЖКА', stars: '⭐⭐⭐' },
+    { emoji: '🐼', title: 'ПАНДА-БАМБУК', stars: '⭐⭐⭐⭐' },
+    { emoji: '🐨', title: 'КОАЛА-СОНЯ', stars: '⭐⭐⭐' },
+    { emoji: '🐸', title: 'ЛЯГУШОНОК-КВАК', stars: '⭐⭐' },
+    { emoji: '🐧', title: 'ПИНГВИНЁНОК-ЛЫЖНИК', stars: '⭐⭐⭐' },
+    { emoji: '🦉', title: 'СОВЁНОК-УМНИК', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '🦔', title: 'ЁЖИК-КОЛЮЧКА', stars: '⭐⭐' },
+    { emoji: '🐢', title: 'ЧЕРЕПАШКА-МУДРАЯ', stars: '⭐⭐⭐⭐' },
+    { emoji: '🐰', title: 'ЗАЙЧОНОК-ПРЫГУН', stars: '⭐⭐⭐' },
+    { emoji: '🦄', title: 'ЕДИНОРОГ-МЕЧТА', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '🐲', title: 'ДРАКОНЧИК-ИСКОРКА', stars: '⭐⭐⭐⭐⭐' },
+    { emoji: '🤖', title: 'РОБОТ-ПОМОЩНИК', stars: '⭐⭐⭐⭐' },
+    { emoji: '🐙', title: 'ОСЬМИНОЖКА-УМНИЦА', stars: '⭐⭐⭐⭐' },
+    { emoji: '🐝', title: 'ПЧЁЛКА-ТРУДЯГА', stars: '⭐⭐⭐' },
+    { emoji: '🐬', title: 'ДЕЛЬФИН-ПЛОВЕЦ', stars: '⭐⭐⭐⭐' },
+    { emoji: '🦅', title: 'ОРЁЛ-ЗОРКИЙ ГЛАЗ', stars: '⭐⭐⭐⭐⭐' },
+  ];
+
+  const ALL_ARTIFACT_CARDS = CAT_ARTIFACTS.concat(MORE_ARTIFACT_CARDS);
+
+  // Детские анекдоты — про разных зверей, а не только про котов
+  const KID_JOKES = [
+    '— Почему коты не играют в карты?\n— Боятся, что украдут "козырного" кота! 🃏',
+    '— Что говорит пчела, когда встречает подругу?\n— Привет, пчёл! 🐝',
+    '— Почему слон не катается на велосипеде?\n— У него нет шлема нужного размера! 🐘',
+    '— Как называют лису, которая любит математику?\n— Лисис-числение! 🦊',
+    '— Почему рыбка всегда хорошо учится?\n— Она не пропускает уроки в школе-аквариуме! 🐟',
+    '— Что сказал ёжик, когда укололся?\n— Ой! Кажется, я сам себя уколол! 🦔',
+    '— Почему у зайца длинные уши?\n— Чтобы лучше слышать, как зовут к обеду! 🐰',
+    '— Сколько нужно медведей, чтобы построить дом?\n— Ни одного: медведи лучше поспят! 🐻',
+    '— Что делает щенок в библиотеке?\n— Читает «Гав-гав-классику»! 🐶',
+    '— Почему сова не спит ночью?\n— Днём она учила уроки! 🦉',
+    '— Что сказала корова, увидев луг?\n— Это моё любимое блюдо! 🐮',
+    '— Почему белка прячет орехи?\n— Чтобы зимой было что пощёлкать! 🐿️',
+    '— Что ищет котёнок в интернете?\n— Мурлыкающую мышку! 🐱',
+    '— Почему черепаха всегда спокойна?\n— У неё есть время подумать! 🐢',
+    '— Как называется рыба, которая умеет считать?\n— Мате-ма-тика! 🐠',
+    '— Почему пингвин не летает?\n— Он выбрал плавание вместо авиабилета! 🐧',
+    '— Что говорит волк, делая уроки?\n— У-у-у-чень интересно! 🐺',
+    '— Почему коала никуда не спешит?\n— Он уже на самой вершине дерева! 🐨',
+    '— Что несёт ёжик в портфеле?\n— Свои колючие знания! 🦔',
+    '— Почему лягушка любит дождь?\n— Потому что это её личный душ! 🐸',
+    '— Как называется самая умная птица?\n— Сова-отличница! 🦉',
+    '— Что делает пингвин на льду?\n— Катается на коньках без очереди! 🐧',
+  ];
+
+  // Интересные факты для детей
+  const COOL_FACTS = [
+    '🐙 У осьминога три сердца и голубая кровь.',
+    '🐘 Слон — единственное животное, которое не умеет прыгать.',
+    '🦒 У жирафа и у человека одинаковое число шейных позвонков — семь.',
+    '🐝 Чтобы сделать ложку мёда, пчёлы трудятся всей семьёй целый день.',
+    '🐬 Дельфины спят с одним открытым глазом: половина мозга бодрствует.',
+    '🦉 Сова может повернуть голову почти на 270 градусов.',
+    '🐧 У пингвинов нет зубов, зато есть колючий язык.',
+    '🐌 У улитки около 25 000 крошечных зубов на языке.',
+    '🦈 Акулы появились на Земле раньше, чем первые деревья.',
+    '🐸 Лягушки пьют воду через кожу, а не ртом.',
+    '🐨 Отпечатки пальцев коалы почти как у человека.',
+    '🐢 Черепахи могут жить больше 150 лет.',
+    '🐜 Муравей поднимает груз в 50 раз тяжелее себя.',
+    '🦋 Бабочки пробуют еду ногами.',
+    '🐳 Сердце синего кита размером с небольшой автомобиль.',
+    '🐈 Кошки мурлычут на частоте, которая помогает костям заживать.',
+    '☀️ Свет от Солнца долетает до Земли примерно за 8 минут.',
+    '🧠 Мозг человека тратит около 20% всей энергии тела.',
+    '🌍 Земля мчится вокруг Солнца со скоростью около 30 км в секунду.',
+    '🌈 Радуга появляется, когда солнечный свет проходит сквозь капли дождя.',
+    '🐝 Пчела видит цвета, которые человек не различает.',
+    '🐿️ Белка забывает часть своих запасов, и из них вырастают новые деревья.',
+  ];
+
+  // Артефакты-награды: дают постоянный бонус в бою
+  const ARTIFACT_REWARDS = [
+    { icon: '🛡', title: 'ЩИТ ЗНАНИЙ', desc: 'один неверный ответ не отнимет HP', apply: function () { state.shield += 1; } },
+    { icon: '🛡', title: 'КРЕПКИЙ ЩИТ', desc: 'два неверных ответа не отнимут HP', apply: function () { state.shield += 2; } },
+    { icon: '⚡', title: 'ЯРОСТЬ В БОЮ', desc: '+5 к урону по боссу за верный ответ', apply: function () { state.bossDmgBonus += 5; } },
+    { icon: '💥', title: 'СИЛА УДАРА', desc: '+3 к урону по боссу за верный ответ', apply: function () { state.bossDmgBonus += 3; } },
+    { icon: '⏱', title: 'ЛИШНЯЯ МИНУТА', desc: '+30 секунд ко всем таймерам', apply: function () { ARTIFACT_TIMER_SECONDS += 30; SPEED_READ_SECONDS += 30; } },
+    { icon: '🌟', title: 'ЗВЕЗДА УДАЧИ', desc: 'щит и +2 к урону боссу', apply: function () { state.shield += 1; state.bossDmgBonus += 2; } },
+  ];
+
+  // Мешочки без повторов: пока содержимое не закончится, ничего не повторяется.
+  // Мешочки живут между играми, поэтому сообщения не дублируются подряд.
+  const cardBag = { items: [] };
+  const jokeBag = { items: [] };
+  const factBag = { items: [] };
+  const rewardBag = { items: [] };
+  function drawFromBag(bag, source) {
+    if (!bag.items.length) bag.items = shuffleArray(source.slice());
+    return bag.items.pop();
+  }
+  function drawCards(count) {
+    const out = [];
+    let guard = 0;
+    while (out.length < count && guard < count * 60) {
+      guard++;
+      const card = drawFromBag(cardBag, ALL_ARTIFACT_CARDS);
+      if (out.some(c => c.title === card.title)) continue;
+      out.push(card);
+    }
+    return out;
+  }
+
+  // ==================== АВАТАРЫ ====================
+  const AVATARS = ['🦁','🐻','🐯','🐺','🦊','🐨','🐼','🐸','🐧','🦉','🐲','🦖','🐱','🐶','🐰','🐹'];
+
+  // ==================== КОНСТАНТЫ ====================
+  let TOTAL_QUESTIONS = 20;
+  let HP_CORRECT = 5;        // HP игроку за правильный ответ
+  let HP_WRONG = 10;         // урон игроку за неправильный ответ
+  let BOSS_HP_WRONG = 10;    // урон боссу за правильный ответ игрока
+  const MOVE_SPEED = 3.2;
+  // Локации: фон зависит от выбранного предмета
+  const THEME_SCENES = {
+    world:    { sky: ['#6eb5e8', '#a8d8f0', '#c8e8a0'], ground: ['#7cb342', '#558b2f', '#33691e'], path: 'rgba(140,110,70,0.35)',  deco: ['🌸','🌻','🌷','🌿'],   sun: '#ffe066', label: '🌍 ЛЕСНАЯ ПРОСЕКА' },
+    math:     { sky: ['#3a2a6e', '#5a3fa0', '#8a6fd0'], ground: ['#2a2a5a', '#1f1f45', '#141430'], path: 'rgba(120,120,220,0.25)', deco: ['➕','➖','✖','➗'],   sun: '#66e0ff', label: '🔢 ДОЛИНА ЧИСЕЛ' },
+    geometry: { sky: ['#1f5f7a', '#2f8fa8', '#7fd0d8'], ground: ['#2f6f6f', '#1f4f4f', '#133030'], path: 'rgba(160,230,230,0.25)', deco: ['🔺','🟥','🟦','⬡'],   sun: '#b0ffff', label: '📐 ГОРОД ФИГУР' },
+    english:  { sky: ['#7a1f3a', '#b03a5a', '#e08fa8'], ground: ['#5a2f4f', '#3f1f38', '#2a1428'], path: 'rgba(230,160,190,0.25)', deco: ['🇬🇧','A','B','C'],   sun: '#ffd0dd', label: '🇬🇧 АЛЛЕЯ СЛОВ' },
+    reading:  { sky: ['#6a4a1f', '#a87a3a', '#e8c88a'], ground: ['#6f5a2f', '#4f3f1f', '#332814'], path: 'rgba(230,200,140,0.3)',  deco: ['📖','✒️','📜','🕯️'], sun: '#ffe9b0', label: '📖 БИБЛИОТЕЧНЫЙ САД' },
+  };
+  function themeScene() { return THEME_SCENES[state.theme] || THEME_SCENES.world; }
+  const INTERACT_DIST = 55;
+  const ARTIFACT_DIST = 50;
+  const ARTIFACTS_TOTAL = 6;         // всего на карте: 3 математики + 3 геометрии
+  const ARTIFACTS_NEEDED = 4;        // столько нужно, чтобы сразиться с боссом
+  let SPEED_READ_SECONDS = 60;       // таймер скорочтения
+  let ARTIFACT_TIMER_SECONDS = 60;   // таймер решения заданий (если включён)
+
+  // ==================== УРОВНИ СЛОЖНОСТИ ====================
+  // Влияют и на содержимое заданий (разброс вариантов), и на бой/таймеры.
+  const DIFFICULTY = {
+    easy:   { label: 'ЛЁГКИЙ',  qCount: 15, hpCorrect: 8, hpWrong: 6,  bossDmg: 12, maxHp: 120, speedRead: 90, artifactTimer: 90, spread: 4 },
+    normal: { label: 'СРЕДНИЙ', qCount: 20, hpCorrect: 5, hpWrong: 10, bossDmg: 10, maxHp: 100, speedRead: 60, artifactTimer: 60, spread: 3 },
+    hard:   { label: 'СЛОЖНЫЙ', qCount: 20, hpCorrect: 4, hpWrong: 14, bossDmg: 8,  maxHp: 80,  speedRead: 45, artifactTimer: 45, spread: 2 },
+  };
+  function diffCfg() { return DIFFICULTY[state.difficulty] || DIFFICULTY.normal; }
+  function applyDifficulty() {
+    const d = diffCfg();
+    TOTAL_QUESTIONS = d.qCount;
+    HP_CORRECT = d.hpCorrect;
+    HP_WRONG = d.hpWrong;
+    BOSS_HP_WRONG = d.bossDmg;
+    SPEED_READ_SECONDS = d.speedRead;
+    ARTIFACT_TIMER_SECONDS = d.artifactTimer;
+    state.maxHp = d.maxHp;
+  }
+
+  // ==================== СОСТОЯНИЕ ====================
+  const state = {
+    theme: 'world',
+    grade: '2',
+    difficulty: 'normal',
+    playerAvatar: '🦁',
+    bossAvatar: '🤖',
+    player: { x: 90, y: 270, w: 44, h: 44, facing: 'right', step: 0 },
+    opponent: { x: 820, y: 270, w: 50, h: 50, bob: 0 },
+    playerHp: 100,
+    bossHp: 100,
+    maxHp: 100,
+    phase: 'explore',
+    correctAnswers: 0,
+    wrongAnswers: 0,
+    questionNumber: 0,
+    currentQuestion: null,
+    answersLocked: false,
+    keys: { up: false, down: false, left: false, right: false },
+    interactPressed: false,
+    worldW: 960,
+    worldH: 540,
+    particles: [],
+    floatingTexts: [],
+    crowdMood: 'idle',
+    crowdTimer: 0,
+    attackAnim: null,
+    shakeScreen: 0,
+    artifacts: [],
+    artifactOpened: 0,
+    activeArtifact: null,
+    artifactPhase: 'none',
+    artifactMath: null,
+    artifactAnswerLocked: false,
+    artifactTimerId: null,
+    artifactRemaining: 0,
+    // Настройки
+    artifactsRequired: true,
+    // Бонусы от артефактов-наград
+    shield: 0,
+    bossDmgBonus: 0,
+    // Пул вопросов
+    questionPool: [],
+    // Чтение
+    readingMode: 'normal',
+    currentStory: null,
+    storyPage: 0,
+    storyRead: false,
+    speedTimerId: null,
+    speedRemaining: 0,
+    speedDone: false,
+  };
+
+  // ==================== DOM ====================
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const playerMiniHp = document.getElementById('playerMiniHp');
+  const bossMiniHp = document.getElementById('bossMiniHp');
+  const playerMiniText = document.getElementById('playerMiniText');
+  const bossMiniText = document.getElementById('bossMiniText');
+  const qCounter = document.getElementById('qCounter');
+  const artifactCounter = document.getElementById('artifactCounter');
+  const playerAvatarHud = document.getElementById('playerAvatarHud');
+  const themeHud = document.getElementById('themeHud');
+  const gradeHud = document.getElementById('gradeHud');
+  const diffHud = document.getElementById('diffHud');
+
+  const quizPanel = document.getElementById('quizPanel');
+  const quizTurn = document.getElementById('quizTurn');
+  const quizStats = document.getElementById('quizStats');
+  const quizMode = document.getElementById('quizMode');
+  const questionText = document.getElementById('questionText');
+  const answersRow = document.getElementById('answersRow');
+  const factBox = document.getElementById('factBox');
+  const feedback = document.getElementById('feedback');
+
+  const startOverlay = document.getElementById('startOverlay');
+  const winOverlay = document.getElementById('winOverlay');
+  const winTitle = document.getElementById('winTitle');
+  const winSub = document.getElementById('winSub');
+  const winStats = document.getElementById('winStats');
+  const restartBtn = document.getElementById('restartBtn');
+  const startBtn = document.getElementById('startBtn');
+
+  const artifactOverlay = document.getElementById('artifactOverlay');
+  const artifactCat = document.getElementById('artifactCat');
+  const artifactMath = document.getElementById('artifactMath');
+  const catEmoji = document.getElementById('catEmoji');
+  const catTitle = document.getElementById('catTitle');
+  const catStars = document.getElementById('catStars');
+  const catJoke = document.getElementById('catJoke');
+  const catFact = document.getElementById('catFact');
+  const catReward = document.getElementById('catReward');
+  const catBackBtn = document.getElementById('catBackBtn');
+  const artifactMathEmoji = document.getElementById('artifactMathEmoji');
+  const artifactQuestion = document.getElementById('artifactQuestion');
+  const artifactAnswers = document.getElementById('artifactAnswers');
+  const artifactFeedback = document.getElementById('artifactFeedback');
+  const artifactProgress = document.getElementById('artifactProgress');
+  const artifactBackBtn = document.getElementById('artifactBackBtn');
+
+  const bookOverlay = document.getElementById('bookOverlay');
+  const bookTitle = document.getElementById('bookTitle');
+  const bookText = document.getElementById('bookText');
+  const bookPageIndicator = document.getElementById('bookPageIndicator');
+  const bookPrevBtn = document.getElementById('bookPrevBtn');
+  const bookNextBtn = document.getElementById('bookNextBtn');
+  const bookCloseBtn = document.getElementById('bookCloseBtn');
+
+  const readingModeTitle = document.getElementById('readingModeTitle');
+  const readingModeGrid = document.getElementById('readingModeGrid');
+  const speedHeader = document.getElementById('speedHeader');
+  const speedTimerText = document.getElementById('speedTimerText');
+  const speedWordCount = document.getElementById('speedWordCount');
+  const speedCountdown = document.getElementById('speedCountdown');
+  const artifactTimerCheck = document.getElementById('artifactTimerCheck');
+  const artifactTimerBar = document.getElementById('artifactTimerBar');
+  const artifactTimerText = document.getElementById('artifactTimerText');
+
+  const bossGateOverlay = document.getElementById('bossGateOverlay');
+  const bossGateProgress = document.getElementById('bossGateProgress');
+  const bossGateClose = document.getElementById('bossGateClose');
+
+  // ==================== АВАТАРЫ UI ====================
+  function buildAvatarUI() {
+    const grid = document.getElementById('avatarGrid');
+    grid.innerHTML = '';
+    AVATARS.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = 'avatar-option';
+      btn.textContent = a;
+      btn.dataset.avatar = a;
+      if (a === state.playerAvatar) btn.classList.add('selected');
+      btn.addEventListener('click', () => {
+        state.playerAvatar = a;
+        document.querySelectorAll('.avatar-option').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        playerAvatarHud.textContent = a;
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  // ==================== ТЕМЫ UI ====================
+  function buildThemeUI() {
+    document.querySelectorAll('[data-theme]').forEach(btn => {
+      if (btn.dataset.theme === state.theme) btn.classList.add('selected');
+      else btn.classList.remove('selected');
+    });
+    const isReading = state.theme === 'reading';
+    readingModeTitle.style.display = isReading ? 'block' : 'none';
+    readingModeGrid.style.display = isReading ? 'flex' : 'none';
+    const speedTrainerTitle = document.getElementById('speedTrainerTitle');
+    const speedTrainerGrid = document.getElementById('speedTrainerGrid');
+    if (speedTrainerTitle) speedTrainerTitle.style.display = isReading ? 'block' : 'none';
+    if (speedTrainerGrid) speedTrainerGrid.style.display = isReading ? 'flex' : 'none';
+    buildReadingModeUI();
+  }
+
+  function buildReadingModeUI() {
+    document.querySelectorAll('[data-reading]').forEach(btn => {
+      if (btn.dataset.reading === state.readingMode) btn.classList.add('selected');
+      else btn.classList.remove('selected');
+    });
+  }
+
+  document.querySelectorAll('[data-theme]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.theme = btn.dataset.theme;
+      buildThemeUI();
+    });
+  });
+
+  document.querySelectorAll('[data-reading]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.readingMode = btn.dataset.reading;
+      buildReadingModeUI();
+    });
+  });
+
+  // ==================== КЛАСС И СЛОЖНОСТЬ UI ====================
+  function buildGradeUI() {
+    document.querySelectorAll('[data-grade]').forEach(btn => {
+      if (btn.dataset.grade === state.grade) btn.classList.add('selected');
+      else btn.classList.remove('selected');
+    });
+  }
+
+  function buildDifficultyUI() {
+    document.querySelectorAll('[data-diff]').forEach(btn => {
+      if (btn.dataset.diff === state.difficulty) btn.classList.add('selected');
+      else btn.classList.remove('selected');
+    });
+  }
+
+  document.querySelectorAll('[data-grade]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.grade = btn.dataset.grade;
+      buildGradeUI();
+    });
+  });
+
+  document.querySelectorAll('[data-diff]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.difficulty = btn.dataset.diff;
+      buildDifficultyUI();
+    });
+  });
+
+  // ==================== ЗРИТЕЛИ ====================
+  const spectators = [];
+  function initSpectators() {
+    spectators.length = 0;
+    const positions = [
+      { x: 30, y: 90 }, { x: 30, y: 170 }, { x: 30, y: 250 },
+      { x: 30, y: 330 }, { x: 30, y: 410 },
+      { x: 930, y: 90 }, { x: 930, y: 170 }, { x: 930, y: 250 },
+      { x: 930, y: 330 }, { x: 930, y: 410 },
+    ];
+    const emojis = ['🐰','🐿️','🦊','🐸','🦝','🐼','🦉','🐧','🦔','🐨'];
+    positions.forEach((pos, i) => {
+      spectators.push({
+        x: pos.x, y: pos.y, baseY: pos.y,
+        emoji: emojis[i],
+        animTimer: 0, animType: 'idle',
+        phase: Math.random() * Math.PI * 2,
+      });
+    });
+  }
+  initSpectators();
+
+  // ==================== ПУЛЫ ====================
+  function shuffleArray(arr) {
+    const c = [...arr];
+    for (let i = c.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [c[i], c[j]] = [c[j], c[i]];
+    }
+    return c;
+  }
+
+  // Память обо всех заданных вопросах за сеанс — чтобы не повторялись между играми
+  const askedQuestionKeys = new Set();
+  function questionKey(q) {
+    if (!q || !q.q) return '';
+    // Ключ — только текст вопроса: одна и та же формулировка не должна
+    // встретиться дважды ни в бою, ни в повторных играх.
+    return q.q;
+  }
+
+  function filterByDiff(all) {
+    const diff = state.difficulty;
+    const filtered = all.filter(q => {
+      if (diff === 'easy') return (q.d || 1) <= 2;
+      if (diff === 'hard') return (q.d || 1) >= 2;
+      return true;
+    });
+    return filtered.length >= TOTAL_QUESTIONS ? filtered : all;
+  }
+
+  function filterByGrade(list) {
+    const grade = Number(state.grade);
+    let filtered = list.filter(q => !q.grades || q.grades.indexOf(grade) !== -1);
+    // Для 1 класса в банках контента нет своей метки — берём самые простые задания
+    if (!filtered.length && grade <= 1) {
+      filtered = list.filter(q => (q.d || 1) <= 1);
+      if (filtered.length < TOTAL_QUESTIONS) filtered = list.filter(q => (q.d || 1) <= 2);
+    }
+    return filtered.length ? filtered : list;
+  }
+
+  // Сгенерированные задания по математике/геометрии под класс и сложность.
+  // Банк строится один раз и кешируется (>= 200 уникальных заданий), поэтому
+  // одинаковые задания не выпадают повторно между играми.
+  const generatedBankCache = {};
+  function generatedBank(kind) {
+    const cacheKey = kind + '|' + state.grade + '|' + state.difficulty;
+    if (generatedBankCache[cacheKey]) return generatedBankCache[cacheKey];
+
+    const target = 210;
+    const seen = new Set();
+    const list = [];
+    let guard = 0;
+    while (list.length < target && guard < target * 40) {
+      guard++;
+      const p = generateArtifactProblem(kind);
+      const uniq = p.prompt + '=' + p.answer;
+      if (seen.has(uniq)) continue;
+      seen.add(uniq);
+      const opts = shuffleArray(p.options).map(String);
+      list.push({
+        q: p.prompt,
+        a: opts,
+        correct: opts.indexOf(String(p.answer)),
+        fact: 'Правильный ответ: ' + p.answer,
+        d: 2,
+      });
+    }
+    generatedBankCache[cacheKey] = list;
+    return list;
+  }
+
+  function currentBank() {
+    // Математика и геометрия — задания генерируются под класс и сложность
+    if (state.theme === 'math' || state.theme === 'geometry') {
+      return generatedBank(state.theme);
+    }
+
+    // Чтение — вопросы по выбранному рассказу + общий банк литературы
+    if (state.theme === 'reading') {
+      let storyQ = [];
+      if (state.currentStory) {
+        if (state.currentStory.questions && state.currentStory.questions.length) storyQ = state.currentStory.questions;
+        else if (STORY_QUESTIONS[state.currentStory.title]) storyQ = STORY_QUESTIONS[state.currentStory.title];
+      }
+      const general = filterByDiff(filterByGrade(Array.isArray(window.EDU_READING) ? window.EDU_READING : []));
+      const extra = general.filter(g => !storyQ.some(s => s.q === g.q));
+      return storyQ.concat(extra);
+    }
+
+    // Крупные внешние банки (content-world.js / content-english.js) по классу и сложности
+    const bigBanks = { world: 'EDU_WORLD', english: 'EDU_ENGLISH' };
+    const bigName = bigBanks[state.theme];
+    if (bigName && Array.isArray(window[bigName]) && window[bigName].length) {
+      return filterByDiff(filterByGrade(window[bigName]));
+    }
+
+    // Резервная внешняя база (content.js) — вопросы по выбранному классу
+    const ext = window.EDU_CONTENT && window.EDU_CONTENT.banks && window.EDU_CONTENT.banks[state.theme];
+    if (ext && ext[state.grade]) {
+      return filterByDiff(ext[state.grade]);
+    }
+    return QUESTION_BANK[state.theme] || QUESTION_BANK.world;
+  }
+
+  // Пул вопросов без повторов в текущем сеансе
+  function buildQuestionPool() {
+    const bank = currentBank();
+    let pool = bank.filter(q => !askedQuestionKeys.has(questionKey(q)));
+    if (pool.length < TOTAL_QUESTIONS) {
+      // Банк за сеанс исчерпан — начинаем новый круг
+      askedQuestionKeys.clear();
+      pool = bank.slice();
+    }
+    return shuffleArray(pool);
+  }
+
+  function initPools() {
+    state.questionPool = buildQuestionPool();
+    state.artifactsPool = ALL_ARTIFACT_CARDS.slice();
+  }
+
+  function initArtifacts() {
+    const positions = [
+      { x: 200, y: 100 }, { x: 480, y: 80 }, { x: 760, y: 100 },
+      { x: 300, y: 260 }, { x: 660, y: 260 }, { x: 800, y: 460 },
+    ];
+    const shuffledPositions = shuffleArray(positions);
+    const kinds = shuffleArray(['math', 'math', 'math', 'geometry', 'geometry', 'geometry']);
+    // Карточки берём из мешочка без повторов, а к каждой подбираем
+    // неповторяющиеся анекдот, факт и награду
+    const cards = drawCards(ARTIFACTS_TOTAL);
+    state.artifacts = cards.map((art, i) => ({
+      x: shuffledPositions[i].x,
+      y: shuffledPositions[i].y,
+      emoji: art.emoji,
+      opened: false,
+      index: i,
+      kind: kinds[i],
+      bob: Math.random() * Math.PI * 2,
+      data: art,
+      joke: drawFromBag(jokeBag, KID_JOKES),
+      fact: drawFromBag(factBag, COOL_FACTS),
+      reward: drawFromBag(rewardBag, ARTIFACT_REWARDS),
+    }));
+    state.artifactOpened = 0;
+  }
+
+  // ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
+  function distance(a, b) {
+    return Math.hypot((a.x + a.w/2) - (b.x + b.w/2), (a.y + a.h/2) - (b.y + b.h/2));
+  }
+  function distancePoint(ax, ay, bx, by) {
+    return Math.hypot(ax - bx, ay - by);
+  }
+
+  function getRandomQuestion() {
+    // Берём только вопросы, которые ещё не задавали в этом сеансе
+    let q = null;
+    while (state.questionPool.length) {
+      const cand = state.questionPool.pop();
+      const k = questionKey(cand);
+      if (askedQuestionKeys.has(k)) continue;
+      askedQuestionKeys.add(k);
+      q = cand;
+      break;
+    }
+    if (!q) {
+      state.questionPool = buildQuestionPool();
+      if (state.questionPool.length) {
+        q = state.questionPool.pop();
+        askedQuestionKeys.add(questionKey(q));
+      }
+    }
+    if (!q) {
+      askedQuestionKeys.clear();
+      const bank = currentBank();
+      q = bank[Math.floor(Math.random() * bank.length)];
+    }
+    return { ...q };
+  }
+
+  function addFloatingText(x, y, text, color) {
+    state.floatingTexts.push({ x, y, text, color, life: 1.4, maxLife: 1.4, vy: -1.2 });
+  }
+
+  function addParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 3;
+      state.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1,
+        life: 0.8, maxLife: 0.8,
+        color, size: 3 + Math.random() * 3,
+      });
+    }
+  }
+
+  // ==================== ТЕКСТ И ЗВУК ====================
+  function countWords(text) {
+    return text.split(/\s+/).filter(Boolean).length;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Нумерует каждое слово маленькой цифрой сверху (для скорочтения)
+  function buildNumberedText(text) {
+    let idx = 0;
+    const paragraphs = text.split(/\n{2,}/);
+    return paragraphs.map(par => {
+      const words = par.split(/\s+/).filter(Boolean);
+      return words.map(w => {
+        idx++;
+        return '<span class="w">' + escapeHtml(w) + '<span class="wn">' + idx + '</span></span>';
+      }).join('');
+    }).join('<br><br>');
+  }
+
+  let audioCtx = null;
+  function playBeep(freq, duration) {
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch (e) { /* звук не критичен */ }
+  }
+
+  function buildOptions(answer, spread) {
+    const options = new Set([answer]);
+    let guard = 0;
+    while (options.size < 4 && guard < 200) {
+      guard++;
+      const off = Math.floor(Math.random() * (spread * 2 + 1)) - spread;
+      const w = answer + (off === 0 ? spread + 1 : off);
+      if (w !== answer && w >= 0) options.add(w);
+    }
+    return Array.from(options).sort(() => Math.random() - 0.5);
+  }
+
+  // ==================== ГЕНЕРАТОРЫ ЗАДАНИЙ (по классу и сложности) ====================
+  function gradeNum() { return Number(state.grade) || 2; }
+  function rndInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+  // Примеры по математике (арифметика) для артефактов — числа зависят от класса
+  function generateArtifactMath() {
+    const g = gradeNum();
+    // 1 класс — счёт в пределах 10: только сложение и вычитание маленьких чисел
+    if (g <= 1) {
+      let a, b, answer, prompt;
+      if (Math.random() < 0.5) {
+        a = rndInt(1, 9); b = rndInt(1, 10 - a);
+        answer = a + b; prompt = a + ' + ' + b + ' = ?';
+      } else {
+        a = rndInt(2, 10); b = rndInt(1, a - 1);
+        answer = a - b; prompt = a + ' − ' + b + ' = ?';
+      }
+      return { kind: 'math', prompt, answer, options: buildOptions(answer, diffCfg().spread) };
+    }
+    const ops = g <= 2 ? ['+', '−'] : (g === 3 ? ['+', '−', '×'] : ['+', '−', '×', '÷']);
+    const op = ops[Math.floor(Math.random() * ops.length)];
+    const lim = g <= 2 ? 20 : (g === 3 ? 100 : (g === 4 ? 1000 : 10000));
+    let a, b, answer, prompt;
+    if (op === '+') {
+      a = rndInt(1, lim); b = rndInt(1, lim);
+      answer = a + b; prompt = a + ' + ' + b + ' = ?';
+    } else if (op === '−') {
+      a = rndInt(2, lim); b = rndInt(1, a - 1);
+      answer = a - b; prompt = a + ' − ' + b + ' = ?';
+    } else if (op === '×') {
+      const m = g <= 3 ? 10 : 12;
+      a = rndInt(2, m); b = rndInt(2, m);
+      answer = a * b; prompt = a + ' × ' + b + ' = ?';
+    } else {
+      const m = g <= 4 ? 12 : 20;
+      b = rndInt(2, m); answer = rndInt(2, m); a = b * answer;
+      prompt = a + ' : ' + b + ' = ?';
+    }
+    return { kind: 'math', prompt, answer, options: buildOptions(answer, diffCfg().spread) };
+  }
+
+  // Примеры по геометрии — периметр/площадь/объём, размеры зависят от класса
+  function generateArtifactGeometry() {
+    const g = gradeNum();
+    // 1 класс — считаем фигуры (счёт в пределах 10) вместо периметров и площадей
+    if (g <= 1) {
+      const shapes = [
+        { e: '🔺', n: 'треугольников' },
+        { e: '🟦', n: 'квадратов' },
+        { e: '⭕', n: 'кругов' },
+        { e: '⭐', n: 'звёздочек' },
+      ];
+      const s = shapes[Math.floor(Math.random() * shapes.length)];
+      const count = rndInt(1, 10);
+      const prompt = 'Посчитай ' + s.n + ': ' + s.e.repeat(count) + ' — сколько?';
+      return { kind: 'geometry', prompt, answer: count, options: buildOptions(count, diffCfg().spread) };
+    }
+    const maxSide = g <= 2 ? 7 : (g === 3 ? 9 : (g === 4 ? 12 : 15));
+    const tasks = [
+      () => { const a = rndInt(2, maxSide); return { answer: a * 4, prompt: 'Периметр квадрата со стороной ' + a + ' см = ?' }; },
+      () => { const a = rndInt(2, maxSide); return { answer: a * a, prompt: 'Площадь квадрата со стороной ' + a + ' см = ?' }; },
+      () => { const a = rndInt(2, maxSide); const b = rndInt(2, maxSide); return { answer: 2 * (a + b), prompt: 'Периметр прямоугольника со сторонами ' + a + ' см и ' + b + ' см = ?' }; },
+      () => { const a = rndInt(2, maxSide); const b = rndInt(2, maxSide); return { answer: a * b, prompt: 'Площадь прямоугольника со сторонами ' + a + ' см и ' + b + ' см = ?' }; },
+      () => { const a = rndInt(2, maxSide); const b = rndInt(2, maxSide); const c = rndInt(2, maxSide); return { answer: a + b + c, prompt: 'Периметр треугольника со сторонами ' + a + ' см, ' + b + ' см и ' + c + ' см = ?' }; },
+    ];
+    if (g >= 5) {
+      tasks.push(() => { const a = rndInt(2, 8); return { answer: a * a * a, prompt: 'Объём куба с ребром ' + a + ' см = ?' }; });
+    }
+    const t = tasks[Math.floor(Math.random() * tasks.length)]();
+    return { kind: 'geometry', prompt: t.prompt, answer: t.answer, options: buildOptions(t.answer, diffCfg().spread) };
+  }
+
+  function generateArtifactProblem(kind) {
+    return kind === 'geometry' ? generateArtifactGeometry() : generateArtifactMath();
+  }
+
+  // ==================== HUD ====================
+  function updateHUD() {
+    const pp = Math.max(0, state.playerHp / state.maxHp * 100);
+    const bp = Math.max(0, state.bossHp / state.maxHp * 100);
+    playerMiniHp.style.width = pp + '%';
+    bossMiniHp.style.width = bp + '%';
+    playerMiniText.textContent = Math.round(state.playerHp);
+    bossMiniText.textContent = Math.round(state.bossHp);
+    qCounter.textContent = state.questionNumber + '/' + TOTAL_QUESTIONS;
+    artifactCounter.textContent = state.artifactsRequired ? (state.artifactOpened + '/' + ARTIFACTS_NEEDED) : 'выкл.';
+    playerAvatarHud.textContent = state.playerAvatar;
+
+    const themeNames = {
+      world: '🌍 Окружающий мир',
+      math: '🔢 Математика',
+      geometry: '📐 Геометрия',
+      english: '🇬🇧 Английский',
+      reading: '📖 Чтение',
+    };
+    themeHud.textContent = themeNames[state.theme] || '';
+    if (gradeHud) gradeHud.textContent = state.grade + ' класс';
+    if (diffHud) diffHud.textContent = (DIFFICULTY[state.difficulty] || DIFFICULTY.normal).label.toLowerCase();
+  }
+
+  // ==================== УПРАВЛЕНИЕ ====================
+  document.addEventListener('keydown', (e) => {
+    // Если открыто чтение — работают стрелки и Escape
+    if (speedTrainerOverlay.style.display === 'flex') {
+      if (e.key === 'Escape') { e.preventDefault(); closeSpeedTrainer(); }
+      return;
+    }
+    if (bookOverlay.style.display === 'flex') {
+      if (e.key === 'ArrowRight') { e.preventDefault(); bookNext(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); bookPrev(); }
+      if (e.key === 'Escape') { e.preventDefault(); closeBook(); }
+      return;
+    }
+    if (artifactOverlay.style.display === 'flex') {
+      if (e.key === 'Escape') { e.preventDefault(); closeArtifact(); }
+      return;
+    }
+    if (bossGateOverlay.style.display === 'flex') {
+      if (e.key === 'Escape' || e.key === ' ') { e.preventDefault(); bossGateOverlay.style.display = 'none'; }
+      return;
+    }
+    if (startOverlay.style.display === 'flex' || winOverlay.style.display === 'flex') return;
+    if (settingsOverlay.style.display === 'flex') return;
+
+    switch (e.key) {
+      case 'ArrowUp': case 'w': case 'W': state.keys.up = true; e.preventDefault(); break;
+      case 'ArrowDown': case 's': case 'S': state.keys.down = true; e.preventDefault(); break;
+      case 'ArrowLeft': case 'a': case 'A': state.keys.left = true; e.preventDefault(); break;
+      case 'ArrowRight': case 'd': case 'D': state.keys.right = true; e.preventDefault(); break;
+      case ' ': case 'Enter':
+        if (state.phase === 'explore') state.interactPressed = true;
+        e.preventDefault();
+        break;
+    }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    switch (e.key) {
+      case 'ArrowUp': case 'w': case 'W': state.keys.up = false; break;
+      case 'ArrowDown': case 's': case 'S': state.keys.down = false; break;
+      case 'ArrowLeft': case 'a': case 'A': state.keys.left = false; break;
+      case 'ArrowRight': case 'd': case 'D': state.keys.right = false; break;
+    }
+  });
+
+  // ==================== СЕНСОРНОЕ УПРАВЛЕНИЕ (МОБИЛЬНЫЕ) ====================
+  // Экранные кнопки: крестовина для движения + кнопка действия (аналог ПРОБЕЛА).
+  const touchMode = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0))
+    && !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
+  const touchControls = document.getElementById('touchControls');
+  const touchActionBtn = document.getElementById('touchActionBtn');
+
+  function setTouchDir(dir, pressed) {
+    if (Object.prototype.hasOwnProperty.call(state.keys, dir)) state.keys[dir] = pressed;
+  }
+
+  function resetTouchKeys() {
+    state.keys.up = false; state.keys.down = false;
+    state.keys.left = false; state.keys.right = false;
+    state.interactPressed = false;
+    document.querySelectorAll('.dpad-btn.pressed, .action-btn-touch.pressed')
+      .forEach(b => b.classList.remove('pressed'));
+  }
+
+  function bindTouchHold(el, onDown, onUp) {
+    if (!el) return;
+    let active = false;
+    const release = () => {
+      if (!active) return;
+      active = false;
+      el.classList.remove('pressed');
+      if (onUp) onUp();
+    };
+    el.addEventListener('pointerdown', (e) => {
+      if (e.cancelable) e.preventDefault();
+      if (active) return;
+      active = true;
+      el.classList.add('pressed');
+      onDown();
+      if (e.pointerId != null && el.setPointerCapture) {
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* игнорируем */ }
+      }
+    });
+    el.addEventListener('pointerup', (e) => { if (e.cancelable) e.preventDefault(); release(); });
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('lostpointercapture', release);
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  if (touchMode) {
+    document.querySelectorAll('.dpad-btn').forEach(btn => {
+      const dir = btn.dataset.dir;
+      bindTouchHold(btn, () => setTouchDir(dir, true), () => setTouchDir(dir, false));
+    });
+    bindTouchHold(touchActionBtn, () => {
+      if (state.phase === 'explore') state.interactPressed = true;
+    }, null);
+    window.addEventListener('blur', resetTouchKeys);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) resetTouchKeys(); });
+
+    const mobileHint = document.getElementById('mobileHint');
+    const desktopHint = document.getElementById('desktopHint');
+    if (mobileHint && desktopHint) {
+      mobileHint.style.display = 'block';
+      desktopHint.style.display = 'none';
+    }
+  }
+
+  // Экранные кнопки показываем только в режиме исследования, не поверх меню
+  function refreshTouchControls() {
+    if (!touchMode || !touchControls) return;
+    const modalOpen = startOverlay.style.display === 'flex'
+      || winOverlay.style.display === 'flex'
+      || artifactOverlay.style.display === 'flex'
+      || bookOverlay.style.display === 'flex'
+      || bossGateOverlay.style.display === 'flex'
+      || settingsOverlay.style.display === 'flex'
+      || speedTrainerOverlay.style.display === 'flex';
+    const exploring = state.phase === 'explore' && !modalOpen;
+    touchControls.classList.toggle('enabled', exploring);
+    if (!exploring) resetTouchKeys();
+  }
+
+  // ==================== ФИЗИКА ====================
+  function updateExploration(dt) {
+    if (state.phase !== 'explore') return;
+    const p = state.player;
+    let dx = 0, dy = 0;
+    if (state.keys.left) { dx -= 1; p.facing = 'left'; }
+    if (state.keys.right) { dx += 1; p.facing = 'right'; }
+    if (state.keys.up) dy -= 1;
+    if (state.keys.down) dy += 1;
+    if (dx !== 0 || dy !== 0) {
+      const len = Math.hypot(dx, dy);
+      p.x += dx / len * MOVE_SPEED;
+      p.y += dy / len * MOVE_SPEED;
+      p.step += 0.25;
+      if (Math.random() < 0.12) addParticles(p.x + p.w/2, p.y + p.h, 'rgba(80,60,40,0.6)', 1);
+    }
+    p.x = Math.max(60, Math.min(state.worldW - p.w - 60, p.x));
+    p.y = Math.max(60, Math.min(state.worldH - p.h - 20, p.y));
+
+    let nearArtifact = null;
+    for (const art of state.artifacts) {
+      if (art.opened) continue;
+      const d = distancePoint(p.x + p.w/2, p.y + p.h/2, art.x, art.y);
+      if (d < ARTIFACT_DIST) { nearArtifact = art; break; }
+    }
+    const dOpp = distance(p, state.opponent);
+
+    if (state.interactPressed) {
+      state.interactPressed = false;
+      if (nearArtifact) {
+        openArtifact(nearArtifact);
+      } else if (dOpp < INTERACT_DIST) {
+        tryStartBattle();
+      }
+    }
+  }
+
+  // ==================== АРТЕФАКТЫ ====================
+  function clearArtifactTimer() {
+    if (state.artifactTimerId) {
+      clearInterval(state.artifactTimerId);
+      state.artifactTimerId = null;
+    }
+  }
+
+  function startArtifactTimer() {
+    clearArtifactTimer();
+    state.artifactRemaining = ARTIFACT_TIMER_SECONDS;
+    artifactTimerBar.style.display = 'block';
+    artifactTimerText.textContent = state.artifactRemaining;
+    state.artifactTimerId = setInterval(() => {
+      state.artifactRemaining--;
+      artifactTimerText.textContent = Math.max(0, state.artifactRemaining);
+      if (state.artifactRemaining <= 0) {
+        clearArtifactTimer();
+        onArtifactTimeUp();
+      }
+    }, 1000);
+  }
+
+  function onArtifactTimeUp() {
+    if (state.artifactPhase !== 'math') return;
+    state.artifactAnswerLocked = true;
+    document.querySelectorAll('#artifactAnswers .btn-primary').forEach(b => b.disabled = true);
+    playBeep(300, 0.8);
+    artifactFeedback.textContent = '⏰ Время вышло! Сейчас будет новое задание...';
+    artifactFeedback.style.color = '#ff6666';
+    const art = state.activeArtifact;
+    setTimeout(() => {
+      if (state.artifactPhase === 'math' && art) openArtifact(art);
+    }, 1400);
+  }
+
+  function openArtifact(art) {
+    state.activeArtifact = art;
+    state.artifactPhase = 'math';
+    state.artifactAnswerLocked = false;
+    state.artifactMath = generateArtifactProblem(art.kind);
+
+    artifactOverlay.style.display = 'flex';
+    artifactCat.style.display = 'none';
+    artifactMath.style.display = 'block';
+    artifactMathEmoji.textContent = '🔒';
+    artifactQuestion.textContent = '❓ ' + state.artifactMath.prompt;
+    artifactFeedback.textContent = '';
+    artifactFeedback.style.color = '#aaffaa';
+    const kindName = art.kind === 'geometry' ? '📐 геометрия' : '🔢 математика';
+    artifactProgress.textContent = 'Задание: ' + kindName + ' · Котиков открыто: ' + state.artifactOpened + ' / ' + ARTIFACTS_NEEDED;
+
+    artifactAnswers.innerHTML = '';
+    state.artifactMath.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-primary';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => checkArtifactAnswer(btn, opt));
+      artifactAnswers.appendChild(btn);
+    });
+
+    if (artifactTimerCheck.checked) startArtifactTimer();
+    else {
+      clearArtifactTimer();
+      artifactTimerBar.style.display = 'none';
+    }
+  }
+
+  function checkArtifactAnswer(btn, value) {
+    if (state.artifactAnswerLocked) return;
+    state.artifactAnswerLocked = true;
+    document.querySelectorAll('#artifactAnswers .btn-primary').forEach(b => b.disabled = true);
+
+    if (value === state.artifactMath.answer) {
+      btn.style.background = '#1a5a1a';
+      btn.style.borderColor = '#66ff66';
+      artifactMathEmoji.textContent = '🔓';
+      artifactFeedback.textContent = '✅ Верно! Открываем котика...';
+      artifactFeedback.style.color = '#66ff66';
+
+      clearArtifactTimer();
+      artifactTimerBar.style.display = 'none';
+      const art = state.activeArtifact;
+      art.opened = true;
+      state.artifactOpened++;
+      updateHUD();
+
+      state.crowdMood = 'cheer';
+      state.crowdTimer = 1.2;
+      spectators.forEach(s => { s.animType = 'cheer'; s.animTimer = 0.7; });
+
+      setTimeout(() => {
+        state.artifactPhase = 'viewing';
+        artifactMath.style.display = 'none';
+        artifactCat.style.display = 'block';
+        const cat = art.data;
+        catEmoji.textContent = cat.emoji;
+        catTitle.textContent = cat.title;
+        catStars.textContent = cat.stars;
+        catJoke.textContent = '😂 ' + (art.joke || cat.joke || '');
+        catFact.textContent = '💡 ' + (art.fact || '');
+        if (art.reward) {
+          catReward.style.display = 'block';
+          catReward.textContent = art.reward.icon + ' НАГРАДА: ' + art.reward.title + ' — ' + art.reward.desc;
+          if (typeof art.reward.apply === 'function') art.reward.apply();
+          updateHUD();
+        } else {
+          catReward.style.display = 'none';
+        }
+      }, 900);
+    } else {
+      btn.style.background = '#5a1a1a';
+      btn.style.borderColor = '#ff6666';
+      artifactFeedback.textContent = '❌ Неверно! Попробуй другой ответ.';
+      artifactFeedback.style.color = '#ff6666';
+      state.crowdMood = 'boo';
+      state.crowdTimer = 1.2;
+      spectators.forEach(s => { s.animType = 'boo'; s.animTimer = 0.6; });
+
+      setTimeout(() => {
+        if (state.artifactPhase === 'math') {
+          state.artifactAnswerLocked = false;
+          document.querySelectorAll('#artifactAnswers .btn-primary').forEach(b => {
+            b.disabled = false;
+            b.style.background = '';
+            b.style.borderColor = '';
+          });
+          artifactFeedback.textContent = 'Попробуй ещё раз!';
+          artifactFeedback.style.color = '#aaffaa';
+        }
+      }, 1000);
+    }
+  }
+
+  function closeArtifact() {
+    clearArtifactTimer();
+    artifactTimerBar.style.display = 'none';
+    artifactOverlay.style.display = 'none';
+    artifactCat.style.display = 'none';
+    artifactMath.style.display = 'none';
+    state.artifactPhase = 'none';
+    state.activeArtifact = null;
+    state.artifactMath = null;
+  }
+
+  catBackBtn.addEventListener('click', closeArtifact);
+  artifactBackBtn.addEventListener('click', closeArtifact);
+
+  artifactTimerCheck.addEventListener('change', () => {
+    artifactTimerBar.style.display = artifactTimerCheck.checked ? 'block' : 'none';
+    if (state.artifactPhase !== 'math') return;
+    if (artifactTimerCheck.checked) startArtifactTimer();
+    else clearArtifactTimer();
+  });
+
+  // ==================== КНИГА (ЧТЕНИЕ) ====================
+  function clearSpeedTimer() {
+    if (state.speedTimerId) {
+      clearInterval(state.speedTimerId);
+      state.speedTimerId = null;
+    }
+    if (speedCountdown) speedCountdown.style.display = 'none';
+    if (bookText) bookText.classList.remove('countdown-hidden');
+  }
+
+  function fullStoryText(story) {
+    return story.pages.join('\n\n');
+  }
+
+  // Пре-отсчёт «3 · 2 · 1 · ПОЕХАЛИ!», затем старт таймера чтения
+  function startSpeedTimer() {
+    clearSpeedTimer();
+    state.speedRemaining = SPEED_READ_SECONDS;
+    speedTimerText.textContent = state.speedRemaining;
+    // Прячем текст до старта, чтобы не читали заранее
+    bookText.classList.add('countdown-hidden');
+
+    const seq = ['3', '2', '1', 'ПОЕХАЛИ!'];
+    let step = 0;
+    const showStep = () => {
+      if (speedCountdown) {
+        speedCountdown.style.display = 'flex';
+        speedCountdown.textContent = seq[step];
+        speedCountdown.classList.toggle('go', seq[step] === 'ПОЕХАЛИ!');
+        speedCountdown.classList.remove('pop');
+        void speedCountdown.offsetWidth;
+        speedCountdown.classList.add('pop');
+      }
+      step++;
+    };
+    playBeep(440, 0.15);
+    showStep();
+    state.speedTimerId = setInterval(() => {
+      if (step < seq.length) {
+        showStep();
+        return;
+      }
+      // Пре-отсчёт завершён — показываем текст и запускаем настоящий таймер
+      clearInterval(state.speedTimerId);
+      state.speedTimerId = null;
+      if (speedCountdown) speedCountdown.style.display = 'none';
+      bookText.classList.remove('countdown-hidden');
+      playBeep(880, 0.3);
+      state.speedTimerId = setInterval(() => {
+        state.speedRemaining--;
+        speedTimerText.textContent = Math.max(0, state.speedRemaining);
+        if (state.speedRemaining <= 0) {
+          clearSpeedTimer();
+          onSpeedTimeUp();
+        }
+      }, 1000);
+    }, 800);
+  }
+
+  function onSpeedTimeUp() {
+    state.speedDone = true;
+    playBeep(880, 0.9);
+    const total = countWords(fullStoryText(state.currentStory));
+    bookPageIndicator.textContent = '⏰ Время вышло! Всего слов: ' + total + '. Запомни номер над последним прочитанным словом!';
+  }
+
+  function allStories() {
+    if (window.EDU_CONTENT && Array.isArray(window.EDU_CONTENT.stories) && window.EDU_CONTENT.stories.length) {
+      return window.EDU_CONTENT.stories;
+    }
+    return STORIES;
+  }
+
+  // Случайный рассказ, подходящий выбранному классу; вопросы — из самого рассказа
+  function pickStory() {
+    const grade = Number(state.grade);
+    const pool = allStories();
+    const matching = pool.filter(s => !s.grades || s.grades.indexOf(grade) !== -1);
+    const usePool = matching.length ? matching : pool;
+    const story = usePool[Math.floor(Math.random() * usePool.length)];
+    let questions = (story.questions && story.questions.length)
+      ? story.questions
+      : (STORY_QUESTIONS[story.title] || []);
+    const diff = state.difficulty;
+    const fq = questions.filter(q => {
+      if (diff === 'easy') return (q.d || 1) <= 2;
+      if (diff === 'hard') return (q.d || 1) >= 2;
+      return true;
+    });
+    if (fq.length) questions = fq;
+    return { title: story.title, pages: story.pages, questions: questions };
+  }
+
+  function openBook() {
+    if (!state.currentStory) {
+      state.currentStory = pickStory();
+    }
+    state.storyPage = 0;
+    state.speedDone = false;
+    bookOverlay.style.display = 'flex';
+
+    const isSpeed = state.readingMode === 'speed';
+    speedHeader.style.display = isSpeed ? 'block' : 'none';
+    bookText.classList.toggle('speed', isSpeed);
+
+    renderBook();
+
+    if (isSpeed) startSpeedTimer();
+    else clearSpeedTimer();
+  }
+
+  function renderBook() {
+    const story = state.currentStory;
+    const isSpeed = state.readingMode === 'speed';
+    bookTitle.textContent = '📖 ' + story.title;
+
+    if (isSpeed) {
+      const raw = fullStoryText(story);
+      bookText.innerHTML = buildNumberedText(raw);
+      speedWordCount.textContent = countWords(raw);
+      bookPageIndicator.textContent = 'Весь рассказ · слов: ' + countWords(raw);
+      bookPrevBtn.style.display = 'none';
+      bookNextBtn.textContent = '✓ Я ПРОЧИТАЛ';
+      return;
+    }
+
+    bookText.textContent = story.pages[state.storyPage];
+    bookPageIndicator.textContent = 'Страница ' + (state.storyPage + 1) + ' из ' + story.pages.length;
+    bookPrevBtn.style.display = state.storyPage > 0 ? 'inline-block' : 'none';
+    bookNextBtn.textContent = state.storyPage < story.pages.length - 1 ? 'ВПЕРЁД ▶' : '✓ Я ПРОЧИТАЛ';
+  }
+
+  function bookNext() {
+    const story = state.currentStory;
+    const isSpeed = state.readingMode === 'speed';
+    if (!isSpeed && state.storyPage < story.pages.length - 1) {
+      state.storyPage++;
+      renderBook();
+      return;
+    }
+    state.storyRead = true;
+    closeBook();
+    // После прочтения сразу начинаем битву с боссом
+    if (state.artifactOpened >= ARTIFACTS_NEEDED) {
+      startBattle();
+    }
+  }
+
+  function bookPrev() {
+    if (state.readingMode === 'speed') return;
+    if (state.storyPage > 0) {
+      state.storyPage--;
+      renderBook();
+    }
+  }
+
+  function closeBook() {
+    clearSpeedTimer();
+    bookOverlay.style.display = 'none';
+  }
+
+  bookNextBtn.addEventListener('click', bookNext);
+  bookPrevBtn.addEventListener('click', bookPrev);
+  bookCloseBtn.addEventListener('click', closeBook);
+
+  // ==================== ПРОВЕРКА БОЯ ====================
+  function tryStartBattle() {
+    if (state.artifactsRequired && state.artifactOpened < ARTIFACTS_NEEDED) {
+      bossGateProgress.textContent = 'Собрано артефактов: ' + state.artifactOpened + ' / ' + ARTIFACTS_NEEDED;
+      bossGateOverlay.style.display = 'flex';
+      return;
+    }
+    // Если тема — чтение и ещё не читали сказку
+    if (state.theme === 'reading' && !state.storyRead) {
+      openBook();
+      return;
+    }
+    startBattle();
+  }
+
+  bossGateClose.addEventListener('click', () => {
+    bossGateOverlay.style.display = 'none';
+  });
+
+  // ==================== НАСТРОЙКИ ====================
+  const settingsOverlay = document.getElementById('settingsOverlay');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsClose = document.getElementById('settingsClose');
+  const setArtifactsOn = document.getElementById('setArtifactsOn');
+  const setArtifactsOff = document.getElementById('setArtifactsOff');
+
+  function buildSettingsUI() {
+    if (setArtifactsOn) setArtifactsOn.classList.toggle('selected', state.artifactsRequired);
+    if (setArtifactsOff) setArtifactsOff.classList.toggle('selected', !state.artifactsRequired);
+  }
+  function openSettings() { buildSettingsUI(); settingsOverlay.style.display = 'flex'; }
+  function closeSettings() { settingsOverlay.style.display = 'none'; updateHUD(); }
+
+  if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+  if (settingsClose) settingsClose.addEventListener('click', closeSettings);
+  if (setArtifactsOn) setArtifactsOn.addEventListener('click', () => { state.artifactsRequired = true; buildSettingsUI(); });
+  if (setArtifactsOff) setArtifactsOff.addEventListener('click', () => { state.artifactsRequired = false; buildSettingsUI(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (settingsOverlay.style.display === 'flex' && e.key === 'Escape') { e.preventDefault(); closeSettings(); }
+  });
+  buildSettingsUI();
+
+  // ==================== ТРЕНАЖЁР СКОРОЧТЕНИЯ ====================
+  const speedTrainerOverlay = document.getElementById('speedTrainerOverlay');
+  const speedTrainerBtn = document.getElementById('speedTrainerBtn');
+  const trainerMenu = document.getElementById('trainerMenu');
+  const trainerArea = document.getElementById('trainerArea');
+  const trainerTitle = document.getElementById('trainerTitle');
+  const trainerStats = document.getElementById('trainerStats');
+  const trainerHint = document.getElementById('trainerHint');
+  const trainerClose = document.getElementById('trainerClose');
+
+  const TRAINER_GAMES = [
+    { id: 'schulte',   icon: '🔢', label: 'ТАБЛИЦА ШУЛЬТЕ', desc: 'найди числа 1–25 по порядку' },
+    { id: 'find',      icon: '🔍', label: 'НАЙДИ СЛОВО',     desc: 'отыщи слово среди букв' },
+    { id: 'stroop',    icon: '🎨', label: 'СТРУП-ТЕСТ',      desc: 'назови цвет, а не слово' },
+    { id: 'flash',     icon: '⚡', label: 'ВСПЫШКА СЛОВ',    desc: 'успей прочитать слово' },
+    { id: 'syllables', icon: '🧩', label: 'СЛОГИ',           desc: 'прочитай мелькнувшие слоги' },
+    { id: 'alphabet',  icon: '🔤', label: 'АЛФАВИТ',         desc: 'нажми буквы А–Я по порядку' },
+    { id: 'periphery', icon: '👁',  label: 'ПОЛЕ ЗРЕНИЯ',    desc: 'читай по краям, глядя в центр' },
+    { id: 'pairsum',   icon: '➕', label: 'СУММА ПАР',       desc: 'найди соседние числа с суммой 10' },
+  ];
+
+  function makeTrainerBackBtn() {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn-secondary';
+    b.textContent = '◀ К УПРАЖНЕНИЯМ';
+    b.addEventListener('click', buildTrainerMenu);
+    return b;
+  }
+
+  function openSpeedTrainer() {
+    if (!speedTrainerOverlay) return;
+    speedTrainerOverlay.style.display = 'flex';
+    buildTrainerMenu();
+  }
+
+  function closeSpeedTrainer() {
+    if (speedTrainerOverlay) speedTrainerOverlay.style.display = 'none';
+  }
+
+  function buildTrainerMenu() {
+    trainerTitle.textContent = '🏋 ТРЕНАЖЁР СКОРОЧТЕНИЯ';
+    trainerStats.textContent = 'Выбери упражнение';
+    trainerHint.textContent = 'Тренируй внимание, периферийное зрение и скорость чтения.';
+    trainerMenu.innerHTML = '';
+    trainerMenu.style.display = 'flex';
+    trainerArea.style.display = 'none';
+    trainerArea.innerHTML = '';
+    TRAINER_GAMES.forEach(g => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'option-btn';
+      btn.innerHTML = '<span class="opt-icon">' + g.icon + '</span>' +
+        '<span class="opt-label">' + g.label + '</span>' +
+        '<span class="opt-desc">' + g.desc + '</span>';
+      btn.addEventListener('click', () => startTrainerGame(g.id));
+      trainerMenu.appendChild(btn);
+    });
+    const normsBtn = document.createElement('button');
+    normsBtn.type = 'button';
+    normsBtn.className = 'option-btn';
+    normsBtn.innerHTML = '<span class="opt-icon">📏</span>' +
+      '<span class="opt-label">НОРМЫ СКОРОЧТЕНИЯ</span>' +
+      '<span class="opt-desc">слова в минуту по классам</span>';
+    normsBtn.addEventListener('click', showSpeedNorms);
+    trainerMenu.appendChild(normsBtn);
+  }
+
+  function startTrainerGame(id) {
+    trainerMenu.innerHTML = '';
+    trainerMenu.style.display = 'none';
+    trainerArea.style.display = 'flex';
+    trainerArea.innerHTML = '';
+    if (id === 'schulte') startSchulte();
+    else if (id === 'find') startFindWord();
+    else if (id === 'stroop') startStroop();
+    else if (id === 'flash') startFlash();
+    else if (id === 'syllables') startSyllables();
+    else if (id === 'alphabet') startAlphabet();
+    else if (id === 'periphery') startPeriphery();
+    else startPairSum();
+  }
+
+  // --- Упражнение 1: таблица Шульте ---
+  function startSchulte() {
+    const size = 5, total = size * size;
+    const nums = [];
+    for (let i = 1; i <= total; i++) nums.push(i);
+    for (let i = nums.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = nums[i]; nums[i] = nums[j]; nums[j] = tmp;
+    }
+    let next = 1, finished = false;
+    const t0 = performance.now();
+    trainerTitle.textContent = '🔢 ТАБЛИЦА ШУЛЬТЕ';
+    trainerHint.textContent = 'Нажимай числа по порядку от 1 до 25, стараясь держать взгляд в центре таблицы.';
+    trainerStats.textContent = 'Дальше: 1';
+    const grid = document.createElement('div');
+    grid.className = 'schulte-grid';
+    nums.forEach(n => {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'schulte-cell';
+      cell.textContent = n;
+      cell.addEventListener('click', () => {
+        if (finished) return;
+        if (Number(cell.textContent) !== next) {
+          cell.classList.add('miss');
+          setTimeout(() => cell.classList.remove('miss'), 220);
+          return;
+        }
+        cell.classList.add('done');
+        cell.disabled = true;
+        next++;
+        if (next > total) {
+          finished = true;
+          const secs = ((performance.now() - t0) / 1000).toFixed(1);
+          trainerStats.textContent = '✅ Готово за ' + secs + ' сек!';
+          trainerHint.textContent = 'Отлично! Чем меньше время — тем шире поле зрения при чтении.';
+        } else {
+          trainerStats.textContent = 'Дальше: ' + next;
+        }
+      });
+      grid.appendChild(cell);
+    });
+    trainerArea.appendChild(grid);
+    trainerArea.appendChild(makeTrainerBackBtn());
+  }
+
+  // --- Упражнение 2: найди слово ---
+  function startFindWord() {
+    const words = ['КОТ', 'ЛЕС', 'ДОМ', 'СЫР', 'МЯЧ', 'НОС', 'СОК', 'ЛУК', 'ЖУК', 'РАК', 'СОН', 'МЕЛ'];
+    const target = words[Math.floor(Math.random() * words.length)];
+    const alphabet = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЮЯ';
+    const size = 10;
+    const cells = [];
+    for (let i = 0; i < size * size; i++) cells.push(alphabet[Math.floor(Math.random() * alphabet.length)]);
+    const horiz = Math.random() < 0.5;
+    const len = target.length;
+    const row = Math.floor(Math.random() * (horiz ? size : size - len + 1));
+    const col = Math.floor(Math.random() * (horiz ? size - len + 1 : size));
+    for (let k = 0; k < len; k++) {
+      const idx = horiz ? row * size + (col + k) : (row + k) * size + col;
+      cells[idx] = target[k];
+    }
+    let progress = 0, finished = false;
+    const t0 = performance.now();
+    trainerTitle.textContent = '🔍 НАЙДИ СЛОВО';
+    trainerStats.textContent = 'Слово: ' + target;
+    trainerHint.textContent = 'Нажимай буквы слова по порядку — можно смотреть по диагонали и периферией. Ошибка сбрасывает прогресс.';
+    const board = document.createElement('div');
+    board.className = 'find-grid';
+    cells.forEach(ch => {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'find-cell';
+      cell.textContent = ch;
+      cell.addEventListener('click', () => {
+        if (finished) return;
+        if (ch === target[progress]) {
+          cell.classList.add('done');
+          progress++;
+          if (progress === len) {
+            finished = true;
+            const secs = ((performance.now() - t0) / 1000).toFixed(1);
+            trainerStats.textContent = '✅ Нашёл «' + target + '» за ' + secs + ' сек!';
+            trainerHint.textContent = 'Попробуй найти следующее слово ещё быстрее.';
+          }
+        } else {
+          progress = 0;
+          board.querySelectorAll('.done').forEach(el => el.classList.remove('done'));
+          cell.classList.add('miss');
+          setTimeout(() => cell.classList.remove('miss'), 220);
+        }
+      });
+      board.appendChild(cell);
+    });
+    trainerArea.appendChild(board);
+    trainerArea.appendChild(makeTrainerBackBtn());
+  }
+
+  // --- Упражнение 3: струп-тест ---
+  function startStroop() {
+    const colors = [
+      { name: 'КРАСНЫЙ', css: '#ff5555' },
+      { name: 'СИНИЙ',   css: '#5599ff' },
+      { name: 'ЗЕЛЁНЫЙ', css: '#55dd55' },
+      { name: 'ЖЁЛТЫЙ',  css: '#ffdd33' },
+    ];
+    const totalRounds = 10;
+    let round = 0, correct = 0;
+    const t0 = performance.now();
+    trainerTitle.textContent = '🎨 СТРУП-ТЕСТ';
+    trainerHint.textContent = 'Выбирай ЦВЕТ чернил, которыми написано слово, а не само слово.';
+    const wordEl = document.createElement('div');
+    wordEl.className = 'stroop-word';
+    const opts = document.createElement('div');
+    opts.className = 'stroop-options';
+    function nextRound() {
+      if (round >= totalRounds) {
+        const secs = ((performance.now() - t0) / 1000).toFixed(1);
+        trainerStats.textContent = '✅ ' + correct + ' из ' + totalRounds + ' за ' + secs + ' сек';
+        trainerHint.textContent = correct >= 8 ? 'Отличное внимание и скорость!' : 'Не читай слово — замечай сразу цвет. Попробуй ещё раз!';
+        wordEl.textContent = '🏁';
+        wordEl.style.color = '#ffdd33';
+        opts.innerHTML = '';
+        return;
+      }
+      round++;
+      trainerStats.textContent = 'Раунд ' + round + ' / ' + totalRounds + ' · ✅ ' + correct;
+      const word = colors[Math.floor(Math.random() * colors.length)];
+      let ink = colors[Math.floor(Math.random() * colors.length)];
+      while (ink.name === word.name) ink = colors[Math.floor(Math.random() * colors.length)];
+      wordEl.textContent = word.name;
+      wordEl.style.color = ink.css;
+      opts.innerHTML = '';
+      colors.forEach(c => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'answer-btn';
+        b.textContent = c.name;
+        b.addEventListener('click', () => {
+          if (c.name === ink.name) correct++;
+          nextRound();
+        });
+        opts.appendChild(b);
+      });
+    }
+    wordEl.textContent = 'ГОТОВ';
+    trainerArea.appendChild(wordEl);
+    trainerArea.appendChild(opts);
+    trainerArea.appendChild(makeTrainerBackBtn());
+    nextRound();
+  }
+
+  // --- Упражнение 4: вспышка слов ---
+  function startFlash() {
+    const words = ['СОЛНЦЕ', 'КОРАБЛЬ', 'ЯБЛОКО', 'РАДУГА', 'ВЕТЕР', 'МОРОЖЕНОЕ', 'БИБЛИОТЕКА', 'ПУТЕШЕСТВИЕ', 'ЗВЕЗДА', 'КОТЁНОК', 'ЛИВЕНЬ', 'ПАРУСНИК'];
+    const totalRounds = 8;
+    let round = 0, correct = 0, level = 0;
+    trainerTitle.textContent = '⚡ ВСПЫШКА СЛОВ';
+    trainerHint.textContent = 'Смотри в центр: слово появится на мгновение. Затем выбери то, что успел увидеть.';
+    const wordEl = document.createElement('div');
+    wordEl.className = 'flash-word';
+    const opts = document.createElement('div');
+    opts.className = 'stroop-options';
+    function nextRound() {
+      if (round >= totalRounds) {
+        trainerStats.textContent = '✅ ' + correct + ' из ' + totalRounds;
+        trainerHint.textContent = 'Чем дольше удаётся читать с одного взгляда — тем быстрее чтение.';
+        wordEl.textContent = '🏁';
+        wordEl.style.color = '#ffdd33';
+        opts.innerHTML = '';
+        return;
+      }
+      round++;
+      const target = words[Math.floor(Math.random() * words.length)];
+      const dur = Math.max(180, 800 - level * 70);
+      trainerStats.textContent = 'Раунд ' + round + ' / ' + totalRounds + ' · ✅ ' + correct;
+      wordEl.textContent = target;
+      opts.innerHTML = '';
+      setTimeout(() => {
+        if (speedTrainerOverlay.style.display !== 'flex') return;
+        wordEl.textContent = '• • •';
+        const choices = [target];
+        while (choices.length < 4) {
+          const w = words[Math.floor(Math.random() * words.length)];
+          if (choices.indexOf(w) === -1) choices.push(w);
+        }
+        for (let i = choices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = choices[i]; choices[i] = choices[j]; choices[j] = tmp;
+        }
+        choices.forEach(w => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'answer-btn';
+          b.textContent = w;
+          b.addEventListener('click', () => {
+            if (w === target) { correct++; level++; } else { level = Math.max(0, level - 1); }
+            nextRound();
+          });
+          opts.appendChild(b);
+        });
+      }, dur);
+    }
+    trainerArea.appendChild(wordEl);
+    trainerArea.appendChild(opts);
+    trainerArea.appendChild(makeTrainerBackBtn());
+    nextRound();
+  }
+
+  // --- Упражнение 5: слоги ---
+  function startSyllables() {
+    const parts = ['МА', 'НО', 'ЛИ', 'СА', 'ТО', 'КИ', 'ДУ', 'РЕ', 'ПО', 'ЗА', 'ВЫ', 'ЖИ'];
+    const totalRounds = 10;
+    let round = 0, correct = 0, level = 0;
+    trainerTitle.textContent = '🧩 СЛОГИ';
+    trainerHint.textContent = 'Мелькнёт цепочка слогов. Прочитай её про себя и выбери ту, что видел.';
+    const wordEl = document.createElement('div');
+    wordEl.className = 'flash-word';
+    const opts = document.createElement('div');
+    opts.className = 'stroop-options';
+    function chain(len) {
+      let s = '';
+      for (let i = 0; i < len; i++) s += parts[Math.floor(Math.random() * parts.length)];
+      return s;
+    }
+    function nextRound() {
+      if (round >= totalRounds) {
+        trainerStats.textContent = '✅ ' + correct + ' из ' + totalRounds;
+        trainerHint.textContent = 'Читая слогами, глаз схватывает целые кусочки слов.';
+        wordEl.textContent = '🏁';
+        wordEl.style.color = '#ffdd33';
+        opts.innerHTML = '';
+        return;
+      }
+      round++;
+      const len = Math.min(2 + Math.floor(level / 3), 4);
+      const target = chain(len);
+      const dur = Math.max(400, 1100 - level * 80);
+      trainerStats.textContent = 'Раунд ' + round + ' / ' + totalRounds + ' · ✅ ' + correct;
+      wordEl.textContent = target;
+      opts.innerHTML = '';
+      setTimeout(() => {
+        if (speedTrainerOverlay.style.display !== 'flex') return;
+        wordEl.textContent = '• • •';
+        const choices = [target];
+        while (choices.length < 4) {
+          const c = chain(len);
+          if (choices.indexOf(c) === -1) choices.push(c);
+        }
+        for (let i = choices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = choices[i]; choices[i] = choices[j]; choices[j] = tmp;
+        }
+        choices.forEach(c => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'answer-btn';
+          b.textContent = c;
+          b.addEventListener('click', () => {
+            if (c === target) { correct++; level++; } else { level = Math.max(0, level - 1); }
+            nextRound();
+          });
+          opts.appendChild(b);
+        });
+      }, dur);
+    }
+    trainerArea.appendChild(wordEl);
+    trainerArea.appendChild(opts);
+    trainerArea.appendChild(makeTrainerBackBtn());
+    nextRound();
+  }
+
+  // --- Упражнение 6: алфавит ---
+  function startAlphabet() {
+    const letters = 'АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'.split('');
+    const shuffled = letters.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+    }
+    let idx = 0, finished = false;
+    const t0 = performance.now();
+    trainerTitle.textContent = '🔤 АЛФАВИТ';
+    trainerHint.textContent = 'Нажимай буквы по алфавиту — от А до Я. Это тренирует узнавание букв без проговаривания.';
+    trainerStats.textContent = 'Дальше: ' + letters[0];
+    const grid = document.createElement('div');
+    grid.className = 'schulte-grid';
+    grid.style.gridTemplateColumns = 'repeat(8, 1fr)';
+    shuffled.forEach(ch => {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'schulte-cell';
+      cell.style.fontSize = '1rem';
+      cell.textContent = ch;
+      cell.addEventListener('click', () => {
+        if (finished) return;
+        if (ch !== letters[idx]) {
+          cell.classList.add('miss');
+          setTimeout(() => cell.classList.remove('miss'), 220);
+          return;
+        }
+        cell.classList.add('done');
+        cell.disabled = true;
+        idx++;
+        if (idx >= letters.length) {
+          finished = true;
+          const secs = ((performance.now() - t0) / 1000).toFixed(1);
+          trainerStats.textContent = '✅ Готово за ' + secs + ' сек!';
+          trainerHint.textContent = 'Быстрое узнавание букв ускоряет чтение целых слов.';
+        } else {
+          trainerStats.textContent = 'Дальше: ' + letters[idx];
+        }
+      });
+      grid.appendChild(cell);
+    });
+    trainerArea.appendChild(grid);
+    trainerArea.appendChild(makeTrainerBackBtn());
+  }
+
+  // --- Упражнение 7: поле зрения ---
+  function startPeriphery() {
+    const words = ['ЛЕС', 'ДОМ', 'СОК', 'МЯЧ', 'КОТ', 'СЫР', 'НОС', 'РАК', 'ЛУК', 'ЖУК', 'МЕЛ', 'СОН'];
+    const totalRounds = 10;
+    let round = 0, correct = 0;
+    trainerTitle.textContent = '👁 ПОЛЕ ЗРЕНИЯ';
+    trainerHint.textContent = 'Держи взгляд на центральном прицеле ◆. Выбирай слово, которое мелькнуло сбоку, не переводя взгляд.';
+    const stage = document.createElement('div');
+    stage.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; width:min(92vw,560px);';
+    const leftEl = document.createElement('div');
+    leftEl.className = 'flash-word';
+    leftEl.style.fontSize = '1.6rem';
+    leftEl.style.minWidth = '90px';
+    leftEl.textContent = '';
+    const centerEl = document.createElement('div');
+    centerEl.textContent = '◆';
+    centerEl.style.cssText = 'font-size:2rem; color:#ffdd33;';
+    const rightEl = document.createElement('div');
+    rightEl.className = 'flash-word';
+    rightEl.style.fontSize = '1.6rem';
+    rightEl.style.minWidth = '90px';
+    rightEl.textContent = '';
+    stage.appendChild(leftEl);
+    stage.appendChild(centerEl);
+    stage.appendChild(rightEl);
+    const opts = document.createElement('div');
+    opts.className = 'stroop-options';
+    function nextRound() {
+      if (round >= totalRounds) {
+        trainerStats.textContent = '✅ ' + correct + ' из ' + totalRounds;
+        trainerHint.textContent = 'Широкое поле зрения позволяет читать фразами, а не по одному слову.';
+        leftEl.textContent = '';
+        rightEl.textContent = '🏁';
+        opts.innerHTML = '';
+        return;
+      }
+      round++;
+      const target = words[Math.floor(Math.random() * words.length)];
+      const side = Math.random() < 0.5 ? 'left' : 'right';
+      trainerStats.textContent = 'Раунд ' + round + ' / ' + totalRounds + ' · ✅ ' + correct;
+      leftEl.textContent = side === 'left' ? target : '';
+      rightEl.textContent = side === 'right' ? target : '';
+      opts.innerHTML = '';
+      setTimeout(() => {
+        if (speedTrainerOverlay.style.display !== 'flex') return;
+        leftEl.textContent = '';
+        rightEl.textContent = '';
+        const choices = [target];
+        while (choices.length < 3) {
+          const w = words[Math.floor(Math.random() * words.length)];
+          if (choices.indexOf(w) === -1) choices.push(w);
+        }
+        for (let i = choices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = choices[i]; choices[i] = choices[j]; choices[j] = tmp;
+        }
+        choices.forEach(w => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'answer-btn';
+          b.textContent = w;
+          b.addEventListener('click', () => {
+            if (w === target) correct++;
+            nextRound();
+          });
+          opts.appendChild(b);
+        });
+      }, 750);
+    }
+    trainerArea.appendChild(stage);
+    trainerArea.appendChild(opts);
+    trainerArea.appendChild(makeTrainerBackBtn());
+    nextRound();
+  }
+
+  // --- Упражнение 8: сумма пар ---
+  function startPairSum() {
+    const size = 5, total = size * size, target = 10;
+    const nums = [];
+    for (let i = 0; i < total; i++) nums.push(1 + Math.floor(Math.random() * 9));
+    const a = 2 + Math.floor(Math.random() * 6);
+    nums[0] = a; nums[1] = target - a;
+    let first = null, finished = false;
+    const t0 = performance.now();
+    trainerTitle.textContent = '➕ СУММА ПАР';
+    trainerHint.textContent = 'Найди стоящие рядом числа, дающие в сумме ' + target + '. Нажми сначала одно число, потом соседнее.';
+    trainerStats.textContent = 'Ищи сумму: ' + target;
+    const grid = document.createElement('div');
+    grid.className = 'schulte-grid';
+    const cells = [];
+    nums.forEach((n, i) => {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'schulte-cell';
+      cell.textContent = n;
+      cell.addEventListener('click', () => {
+        if (finished) return;
+        if (first === null) { first = i; cell.classList.add('done'); return; }
+        if (first === i) { first = null; cell.classList.remove('done'); return; }
+        const r1 = Math.floor(first / size), c1 = first % size;
+        const r2 = Math.floor(i / size), c2 = i % size;
+        const adjacent = Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
+        if (adjacent && nums[first] + n === target) {
+          finished = true;
+          cell.classList.add('done');
+          const secs = ((performance.now() - t0) / 1000).toFixed(1);
+          trainerStats.textContent = '✅ ' + nums[first] + ' + ' + n + ' = ' + target + ' за ' + secs + ' сек!';
+          trainerHint.textContent = 'Схватывай пары чисел одним взглядом — это расширяет поле зрения.';
+        } else {
+          cells[first].classList.remove('done');
+          cell.classList.add('miss');
+          setTimeout(() => cell.classList.remove('miss'), 220);
+          first = null;
+        }
+      });
+      cells.push(cell);
+      grid.appendChild(cell);
+    });
+    trainerArea.appendChild(grid);
+    trainerArea.appendChild(makeTrainerBackBtn());
+  }
+
+  // --- Справка: ориентировочные нормы техники чтения ---
+  const SPEED_NORMS = [
+    { g: '1 класс',      aloud: '25–35',   silent: '30–40' },
+    { g: '2 класс',      aloud: '45–60',   silent: '55–70' },
+    { g: '3 класс',      aloud: '60–80',   silent: '75–95' },
+    { g: '4 класс',      aloud: '80–100',  silent: '100–120' },
+    { g: '5 класс',      aloud: '100–120', silent: '120–150' },
+    { g: 'Взрослый',     aloud: '120–180', silent: '180–250' },
+  ];
+
+  function showSpeedNorms() {
+    trainerMenu.style.display = 'none';
+    trainerArea.style.display = 'flex';
+    trainerArea.innerHTML = '';
+    trainerTitle.textContent = '📏 НОРМЫ СКОРОЧТЕНИЯ';
+    trainerStats.textContent = 'Скорость чтения ≈ слов в минуту';
+    trainerHint.textContent = 'Ориентировочные значения. Главное при быстром чтении — понимать прочитанное (не менее 70%).';
+    const table = document.createElement('div');
+    table.style.cssText = 'width:100%; max-width:560px; font-family:Courier New,monospace; font-size:0.85rem; color:#ccffcc;';
+    const head = document.createElement('div');
+    head.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; padding:6px; background:#1a2a1a; border-radius:6px; font-weight:900; color:#ffdd33;';
+    ['Класс', 'Вслух', 'Про себя'].forEach(t => {
+      const s = document.createElement('span');
+      s.textContent = t;
+      head.appendChild(s);
+    });
+    table.appendChild(head);
+    SPEED_NORMS.forEach(n => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; padding:6px; border-bottom:1px solid #2a5a2a;';
+      [n.g, n.aloud, n.silent].forEach(t => {
+        const s = document.createElement('span');
+        s.textContent = t;
+        row.appendChild(s);
+      });
+      table.appendChild(row);
+    });
+    const notes = document.createElement('div');
+    notes.style.cssText = 'margin-top:12px; font-size:0.72rem; color:#88ff88; line-height:1.7; text-align:left; max-width:560px;';
+    ['• Значения ориентировочные: единого федерального норматива нет, школы опираются на ФГОС и методики.',
+     '• Чтение вслух обычно медленнее, чем «про себя».',
+     '• Тренированное скорочтение — 300–600 слов/мин и выше, но только при сохранении понимания.',
+     '• Прирост 10–15 слов/мин за 2–3 месяца регулярных тренировок — хороший результат.'].forEach(line => {
+      const p = document.createElement('div');
+      p.textContent = line;
+      notes.appendChild(p);
+    });
+    trainerArea.appendChild(table);
+    trainerArea.appendChild(notes);
+    trainerArea.appendChild(makeTrainerBackBtn());
+  }
+
+  if (speedTrainerBtn) speedTrainerBtn.addEventListener('click', openSpeedTrainer);
+  if (trainerClose) trainerClose.addEventListener('click', closeSpeedTrainer);
+
+  // ==================== БОЙ С БОССОМ ====================
+  function startBattle() {
+    state.phase = 'battle';
+    state.answersLocked = false;
+    state.correctAnswers = 0;
+    state.wrongAnswers = 0;
+    state.questionNumber = 0;
+    state.bossHp = state.maxHp;
+    // Пул вопросов без повторов (учитывает уже заданные за сеанс)
+    state.questionPool = buildQuestionPool();
+
+    state.player.x = -200;
+    quizPanel.classList.add('active');
+    quizMode.textContent = '👤 Игрок';
+    feedback.textContent = state.theme === 'reading' ? 'Вспомни рассказ и атакуй босса!' : 'Реши задание и атакуй босса!';
+    quizTurn.textContent = '⚔ БИТВА С БОССОМ';
+    quizStats.textContent = '✅ 0';
+    updateHUD();
+    loadQuestion();
+  }
+
+  function loadQuestion() {
+    if (state.questionNumber >= TOTAL_QUESTIONS) {
+      endGame('questions');
+      return;
+    }
+    if (state.playerHp <= 0 || state.bossHp <= 0) {
+      endGame('knockout');
+      return;
+    }
+
+    state.questionNumber++;
+    updateHUD();
+
+    const q = getRandomQuestion();
+    state.currentQuestion = q;
+    questionText.textContent = '❓ ' + q.q;
+
+    factBox.classList.remove('show');
+    factBox.textContent = '';
+
+    const correctText = q.a[q.correct];
+    const shuffled = shuffleArray(q.a);
+
+    answersRow.innerHTML = '';
+    state.answersLocked = false;
+
+    shuffled.forEach(answerText => {
+      const btn = document.createElement('button');
+      btn.className = 'answer-btn';
+      btn.textContent = answerText;
+      btn.addEventListener('click', () => handleAnswer(btn, answerText === correctText));
+      answersRow.appendChild(btn);
+    });
+
+    quizStats.textContent = '✅ ' + state.correctAnswers + ' / ❌ ' + state.wrongAnswers;
+  }
+
+  function handleAnswer(btn, isCorrect) {
+    if (state.answersLocked || state.phase !== 'battle') return;
+    state.answersLocked = true;
+    document.querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
+
+    const playerScreenX = 260;
+    const bossScreenX = 700;
+    const screenY = 270;
+
+    if (state.currentQuestion && state.currentQuestion.fact) {
+      factBox.textContent = '💡 ' + state.currentQuestion.fact;
+      factBox.classList.add('show');
+    }
+
+    if (isCorrect) {
+      btn.classList.add('correct');
+      state.correctAnswers++;
+
+      // Игрок лечится
+      state.playerHp = Math.min(state.maxHp, state.playerHp + HP_CORRECT);
+      addFloatingText(playerScreenX, screenY - 60, '+' + HP_CORRECT, '#66ff66');
+      addParticles(playerScreenX, screenY, '#66ff66', 8);
+
+      // Босс получает урон (с бонусом от артефактов-наград)
+      const dmg = BOSS_HP_WRONG + (state.bossDmgBonus || 0);
+      state.bossHp = Math.max(0, state.bossHp - dmg);
+      addFloatingText(bossScreenX, screenY - 60, '-' + dmg, '#ff4444');
+      addParticles(bossScreenX, screenY, '#ff4444', 10);
+
+      state.attackAnim = { attacker: 'player', timer: 0.5, maxTimer: 0.5 };
+      state.shakeScreen = 8;
+      state.crowdMood = 'cheer';
+      state.crowdTimer = 1.5;
+      spectators.forEach(s => { s.animType = 'cheer'; s.animTimer = 0.7; });
+
+      feedback.textContent = '✅ Верно! +' + HP_CORRECT + ' HP, босс получает ' + dmg + ' урона!';
+      updateHUD();
+
+      if (state.bossHp <= 0) {
+        setTimeout(() => endGame('knockout'), 800);
+        return;
+      }
+    } else {
+      btn.classList.add('wrong');
+      state.wrongAnswers++;
+
+      // Артефакт-награда «щит» поглощает урон от ошибки
+      if (state.shield > 0) {
+        state.shield--;
+        addFloatingText(playerScreenX, screenY - 60, '🛡 0', '#66ddff');
+        feedback.textContent = '🛡 Щит знаний поглотил урон! Осталось щитов: ' + state.shield;
+      } else {
+        // Игрок теряет HP
+        state.playerHp = Math.max(0, state.playerHp - HP_WRONG);
+        addFloatingText(playerScreenX, screenY - 60, '-' + HP_WRONG, '#ff4444');
+        addParticles(playerScreenX, screenY, '#ff4444', 10);
+        feedback.textContent = '❌ Ошибка! Ты теряешь ' + HP_WRONG + ' HP.';
+      }
+
+      state.shakeScreen = 6;
+      state.crowdMood = 'boo';
+      state.crowdTimer = 1.5;
+      spectators.forEach(s => { s.animType = 'boo'; s.animTimer = 0.6; });
+      updateHUD();
+
+      if (state.playerHp <= 0) {
+        setTimeout(() => endGame('knockout'), 800);
+        return;
+      }
+    }
+
+    // Ход переходит ВСЕГДА — к сопернику (следующий вопрос)
+    setTimeout(() => {
+      if (state.phase === 'battle') loadQuestion();
+    }, 1400);
+  }
+
+  function endGame(reason) {
+    state.phase = 'gameover';
+    let winner, emoji, sub;
+    if (state.playerHp <= 0 && state.bossHp <= 0) {
+      winner = 'НИЧЬЯ'; emoji = '🤝'; sub = 'Оба пали в честном бою.';
+    } else if (state.playerHp <= 0) {
+      winner = 'БОСС ПОБЕДИЛ!'; emoji = '🤖'; sub = 'Попробуй ещё раз — собери больше знаний!';
+    } else if (state.bossHp <= 0) {
+      winner = 'ТЫ ПОБЕДИЛ БОССА!'; emoji = '🏆'; sub = 'Ты доказал, что знания — сила!';
+    } else {
+      if (state.playerHp > state.bossHp) {
+        winner = 'ТЫ ПОБЕДИЛ!'; emoji = '🏆';
+        sub = 'По очкам: ' + Math.round(state.playerHp) + ' против ' + Math.round(state.bossHp);
+      } else if (state.bossHp > state.playerHp) {
+        winner = 'БОСС ПОБЕДИЛ!'; emoji = '🤖';
+        sub = 'По очкам: ' + Math.round(state.bossHp) + ' против ' + Math.round(state.playerHp);
+      } else {
+        winner = 'НИЧЬЯ!'; emoji = '🤝'; sub = 'Равные силы!';
+      }
+    }
+    winTitle.textContent = emoji + ' ' + winner;
+    winSub.textContent = sub;
+    winStats.textContent = state.grade + ' класс · ' + (DIFFICULTY[state.difficulty] || DIFFICULTY.normal).label +
+      ' · Правильных: ' + state.correctAnswers + ' · Ошибок: ' + state.wrongAnswers +
+      ' · Котиков: ' + state.artifactOpened + '/' + ARTIFACTS_NEEDED;
+    setTimeout(() => { winOverlay.style.display = 'flex'; }, 600);
+  }
+
+  // ==================== ОТРИСОВКА ====================
+  function drawBackground() {
+    const scene = themeScene();
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, 340);
+    skyGrad.addColorStop(0, scene.sky[0]);
+    skyGrad.addColorStop(0.7, scene.sky[1]);
+    skyGrad.addColorStop(1, scene.sky[2]);
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, state.worldW, 340);
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = scene.sun;
+    ctx.beginPath(); ctx.arc(840, 80, 45, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff9c4';
+    ctx.beginPath(); ctx.arc(840, 80, 30, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = scene.sun;
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + Date.now() * 0.0003;
+      ctx.beginPath();
+      ctx.moveTo(840 + Math.cos(angle) * 55, 80 + Math.sin(angle) * 55);
+      ctx.lineTo(840 + Math.cos(angle) * 70, 80 + Math.sin(angle) * 70);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    const t = Date.now() * 0.00008;
+    for (let i = 0; i < 4; i++) {
+      const cx = ((i * 300 + t * 500) % (state.worldW + 200)) - 100;
+      drawCloud(cx, 60 + i * 35, 1 + (i % 2) * 0.4);
+    }
+
+    const groundGrad = ctx.createLinearGradient(0, 340, 0, state.worldH);
+    groundGrad.addColorStop(0, scene.ground[0]);
+    groundGrad.addColorStop(0.3, scene.ground[1]);
+    groundGrad.addColorStop(1, scene.ground[2]);
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, 340, state.worldW, state.worldH - 340);
+
+    ctx.fillStyle = scene.path;
+    ctx.fillRect(100, 340, 760, 200);
+
+    drawTree(40, 300, 1.2);
+    drawTree(920, 300, 1.2);
+    drawTree(40, 420, 1.0);
+    drawTree(920, 420, 1.0);
+
+    ctx.font = '20px serif';
+    const flowers = scene.deco;
+    for (let i = 0; i < 8; i++) {
+      ctx.fillText(flowers[i % flowers.length], 130 + i * 95, 460 + Math.sin(i * 1.5) * 15);
+    }
+
+    ctx.font = 'bold 18px "Courier New", monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.strokeText(scene.label, 16, 30);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillText(scene.label, 16, 30);
+  }
+
+  function drawCloud(x, y, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.beginPath();
+    ctx.arc(0, 0, 25, 0, Math.PI * 2);
+    ctx.arc(25, -5, 20, 0, Math.PI * 2);
+    ctx.arc(50, 0, 22, 0, Math.PI * 2);
+    ctx.arc(25, 10, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTree(x, y, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(-8, 0, 16, 60);
+    ctx.fillStyle = '#2e7d32';
+    ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#43a047';
+    ctx.beginPath(); ctx.arc(-10, -10, 30, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#66bb6a';
+    ctx.beginPath(); ctx.arc(10, -5, 25, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawArtifacts() {
+    const now = Date.now() * 0.003;
+    state.artifacts.forEach(art => {
+      if (art.opened) {
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.font = '36px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(art.emoji, art.x, art.y + Math.sin(now + art.bob) * 5);
+        ctx.font = '20px serif';
+        ctx.fillText('✅', art.x, art.y + 28);
+        ctx.restore();
+        return;
+      }
+      const bobY = Math.sin(now + art.bob) * 6;
+      ctx.save();
+      const glowGrad = ctx.createRadialGradient(art.x, art.y + bobY, 5, art.x, art.y + bobY, 40);
+      glowGrad.addColorStop(0, 'rgba(255, 221, 51, 0.6)');
+      glowGrad.addColorStop(1, 'rgba(255, 221, 51, 0)');
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(art.x, art.y + bobY, 40, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(art.x, art.y + 26, 18, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = '38px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(art.emoji, art.x, art.y + bobY);
+
+      ctx.font = 'bold 20px "Courier New"';
+      ctx.fillStyle = '#ffdd33';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      const qY = art.y - 30 + bobY;
+      ctx.strokeText('?', art.x, qY);
+      ctx.fillText('?', art.x, qY);
+    });
+  }
+
+  function drawSpectators() {
+    const now = Date.now() * 0.003;
+    spectators.forEach((s, i) => {
+      let offsetY = 0, offsetX = 0, rotation = 0;
+      if (s.animType === 'cheer' && s.animTimer > 0) {
+        offsetY = -Math.abs(Math.sin(now * 8)) * 15;
+        rotation = Math.sin(now * 10) * 0.2;
+      } else if (s.animType === 'boo' && s.animTimer > 0) {
+        offsetX = Math.sin(now * 20) * 6;
+        rotation = Math.sin(now * 15) * 0.15;
+      } else {
+        offsetY = Math.sin(now + s.phase) * 3;
+      }
+      ctx.save();
+      ctx.translate(s.x + offsetX, s.baseY + offsetY);
+      ctx.rotate(rotation);
+      ctx.font = '32px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(0, 22, 16, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText(s.emoji, 0, 0);
+      ctx.restore();
+
+      if (s.animType === 'cheer' && s.animTimer > 0.3 && Math.random() < 0.06) {
+        addFloatingText(s.x, s.baseY - 30, ['👏','🎉','❤️','⭐'][i % 4], '#66ff66');
+      }
+      if (s.animType === 'boo' && s.animTimer > 0.3 && Math.random() < 0.06) {
+        addFloatingText(s.x, s.baseY - 30, ['👎','💤','😾','🙄'][i % 4], '#ff6666');
+      }
+    });
+    if (state.crowdMood === 'cheer' && state.crowdTimer > 0.5 && Math.random() < 0.03) {
+      addFloatingText(480, 120, 'УРА! 🎉', '#66ff66');
+    }
+    if (state.crowdMood === 'boo' && state.crowdTimer > 0.5 && Math.random() < 0.03) {
+      addFloatingText(480, 120, 'УУУУУ! 😠', '#ff6666');
+    }
+  }
+
+  function drawBeast(x, y, size, emoji, isPlayer, isAttacking, facing, step) {
+    ctx.save();
+    ctx.translate(x + size/2, y + size/2);
+    if (isAttacking) {
+      ctx.translate(0, -10);
+      ctx.rotate(Math.sin(Date.now() * 0.03) * 0.1);
+    }
+    const bobY = isPlayer ? Math.abs(Math.sin(step)) * -5 : Math.sin(Date.now() * 0.003) * 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, size/2 + 8, size * 0.45, size * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (facing === 'left') ctx.scale(-1, 1);
+    ctx.font = size + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 0, bobY);
+    ctx.restore();
+  }
+
+  function drawBattleScene() {
+    const playerX = 260, bossX = 700, beastY = 240;
+    let playerAttacking = false;
+    if (state.attackAnim) {
+      const t = state.attackAnim.timer / state.attackAnim.maxTimer;
+      if (state.attackAnim.attacker === 'player') playerAttacking = t > 0.3;
+    }
+    drawBeast(playerX, beastY, 90, state.playerAvatar, true, playerAttacking, 'right', Date.now() * 0.002);
+    drawBeast(bossX, beastY, 100, state.bossAvatar, false, false, 'left', 0);
+
+    ctx.save();
+    ctx.font = 'bold 40px "Courier New", monospace';
+    ctx.fillStyle = '#ffdd33';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeText('VS', 480, 220);
+    ctx.fillText('VS', 480, 220);
+    ctx.restore();
+  }
+
+  function drawParticles() {
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= 0.02;
+      if (p.life <= 0) { state.particles.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = p.life / p.maxLife;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawFloatingTexts() {
+    for (let i = state.floatingTexts.length - 1; i >= 0; i--) {
+      const f = state.floatingTexts[i];
+      f.y += f.vy; f.life -= 0.016;
+      if (f.life <= 0) { state.floatingTexts.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, f.life / 0.5);
+      ctx.font = 'bold 26px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 4;
+      ctx.strokeText(f.text, f.x, f.y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+      ctx.restore();
+    }
+  }
+
+  function render() {
+    ctx.save();
+    if (state.shakeScreen > 0) {
+      ctx.translate(
+        (Math.random() - 0.5) * state.shakeScreen,
+        (Math.random() - 0.5) * state.shakeScreen
+      );
+      state.shakeScreen *= 0.85;
+      if (state.shakeScreen < 0.5) state.shakeScreen = 0;
+    }
+    drawBackground();
+    drawArtifacts();
+    drawSpectators();
+
+    if (state.phase === 'explore') {
+      const p = state.player;
+      drawBeast(p.x, p.y, 60, state.playerAvatar, true, false, p.facing, p.step);
+      drawBeast(state.opponent.x, state.opponent.y, 65, state.bossAvatar, false, false, 'left', 0);
+
+      const dOpp = distance(p, state.opponent);
+      let nearArt = null;
+      for (const art of state.artifacts) {
+        if (art.opened) continue;
+        if (distancePoint(p.x + p.w/2, p.y + p.h/2, art.x, art.y) < ARTIFACT_DIST) {
+          nearArt = art; break;
+        }
+      }
+      if (nearArt || dOpp < INTERACT_DIST) {
+        ctx.save();
+        ctx.font = 'bold 22px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffdd33';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        const pulse = 1 + Math.sin(Date.now() * 0.008) * 0.1;
+        ctx.translate(480, 500);
+        ctx.scale(pulse, pulse);
+        const actHint = touchMode ? 'КНОПКУ ⚡' : 'ПРОБЕЛ';
+        const text = nearArt ? ('🐱 НАЖМИ ' + actHint + ' — ОТКРЫТЬ!') : ('⚔ НАЖМИ ' + actHint + ' — К БОССУ!');
+        ctx.strokeText(text, 0, 0);
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
+    } else if (state.phase === 'battle') {
+      drawBattleScene();
+    }
+    drawParticles();
+    drawFloatingTexts();
+    ctx.restore();
+
+    if (state.attackAnim) {
+      state.attackAnim.timer -= 0.016;
+      if (state.attackAnim.timer <= 0) state.attackAnim = null;
+    }
+  }
+
+  // ==================== ГЛАВНЫЙ ЦИКЛ ====================
+  let lastTime = performance.now();
+  function gameLoop(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    if (state.phase === 'explore') updateExploration(dt);
+    spectators.forEach(s => {
+      if (s.animTimer > 0) {
+        s.animTimer -= dt;
+        if (s.animTimer <= 0) s.animType = 'idle';
+      }
+    });
+    if (state.crowdTimer > 0) {
+      state.crowdTimer -= dt;
+      if (state.crowdTimer <= 0) state.crowdMood = 'idle';
+    }
+    render();
+    refreshTouchControls();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // ==================== СТАРТ / СБРОС ====================
+  function resetGame() {
+    applyDifficulty();
+    initPools();
+    state.player = { x: 90, y: 270, w: 44, h: 44, facing: 'right', step: 0 };
+    state.opponent = { x: 820, y: 270, w: 50, h: 50, bob: 0 };
+    state.playerHp = state.maxHp;
+    state.bossHp = state.maxHp;
+    state.phase = 'explore';
+    state.correctAnswers = 0;
+    state.wrongAnswers = 0;
+    state.questionNumber = 0;
+    state.currentQuestion = null;
+    state.answersLocked = false;
+    state.attackAnim = null;
+    state.shakeScreen = 0;
+    state.crowdMood = 'idle';
+    state.crowdTimer = 0;
+    state.particles = [];
+    state.floatingTexts = [];
+    state.storyRead = false;
+    state.currentStory = null;
+    state.storyPage = 0;
+    state.speedDone = false;
+    state.speedRemaining = 0;
+    state.shield = 0;
+    state.bossDmgBonus = 0;
+    clearSpeedTimer();
+    speedHeader.style.display = 'none';
+    bookText.classList.remove('speed');
+
+    initArtifacts();
+    state.artifactOpened = 0;
+    state.artifactPhase = 'none';
+    state.activeArtifact = null;
+    state.artifactMath = null;
+    state.artifactAnswerLocked = false;
+    state.artifactRemaining = 0;
+    clearArtifactTimer();
+    artifactTimerBar.style.display = 'none';
+
+    quizPanel.classList.remove('active');
+    winOverlay.style.display = 'none';
+    artifactOverlay.style.display = 'none';
+    bookOverlay.style.display = 'none';
+    bossGateOverlay.style.display = 'none';
+    startOverlay.style.display = 'none';
+
+    document.querySelectorAll('.answer-btn').forEach(b => b.disabled = false);
+    updateHUD();
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (typeof closeSpeedTrainer === 'function') closeSpeedTrainer();
+    startOverlay.style.display = 'none';
+    resetGame();
+  });
+
+  restartBtn.addEventListener('click', () => {
+    winOverlay.style.display = 'none';
+    resetGame();
+    startOverlay.style.display = 'flex';
+  });
+
+  // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+  buildAvatarUI();
+  buildThemeUI();
+  buildGradeUI();
+  buildDifficultyUI();
+  resetGame();
+  startOverlay.style.display = 'flex';
+  requestAnimationFrame(gameLoop);
+
+})();
+</script>
+</body>
+</html>
